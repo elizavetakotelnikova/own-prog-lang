@@ -55,7 +55,7 @@ Value *BinaryExpressionASTNode::codeGeneration() {
   if (!left || !right)
     return nullptr;
 
-  switch (_operator) {
+  switch (_operator.value) {
   case '+':
     return Builder->CreateFAdd(left, right, "addtmp");
   case '-':
