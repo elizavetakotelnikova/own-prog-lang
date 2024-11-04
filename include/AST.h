@@ -30,6 +30,13 @@ public:
     float getValue(){ return value; }
 };
 
+class DoubleLiteralASTNode : public ASTNode {
+    double value;
+public:
+    DoubleLiteralASTNode(double value): value(value){};
+    double getValue(){ return value; }
+};
+
 class StringLiteralASTNode : public ASTNode {
     std::string value;
 public:
@@ -83,6 +90,13 @@ public:
         varName(varName), initValue(std::move(initValue)){};
 };
 
+class VariableReferencingASTNode : public ASTNode {
+  std::string Name;
+public:
+  VariableExprAST(const std::string &Name) : Name(Name) {}
+};
+
+
 class AssignmentASTNode : public ASTNode {
     std::string varName;
     std::unique_ptr<ASTNode> value;
@@ -105,24 +119,75 @@ public:
 };
 
 class ConditionASTNode : public ASTNode {
-    std::unique_ptr<ASTNode> ifBlock, elseBlock;
+    std::unique_ptr<ASTNode> ifBlock, thenBlock, elseBlock;
 public:
     ConditionASTNode(std::unique_ptr<ASTNode> ifBlock, std::unique_ptr<ASTNode> elseBlock) :
-        ifBlock(std::move(ifBlock)), elseBlock(std::move(elseBlock)){};
+        ifBlock(std::move(ifBlock)), thenBlock(std::move(thenBlock), elseBlock(std::move(elseBlock)){};
 };
 
-class ForLoop : public ASTNode {
-    
+class ForLoopASTNode : public ASTNode {
+  std::string variableName;
+  std::unique_ptr<ExprAST> start, end, step, body;
+public:
+  ForLoopASTNode(const std::string &variableName, std::unique_ptr<ExprAST> start,
+             std::unique_ptr<ExprAST> end, std::unique_ptr<ExprAST> step,
+             std::unique_ptr<ExprAST> body)
+      : variableName(variableName), Start(std::move(start)), End(std::move(end)),
+        Step(std::move(step)), Body(std::move(body)) {}
 };
 
-class WhileLoop : public ASTNode {
+class WhileLoopASTNode : public ASTNode {
     std::unique_ptr<ASTNode> a;
 };
 
+class PrototypeAST {
+  std::string name;
+  std::vector<std::string> args;
+  bool isOperator;
+  unsigned precedence;
+
+public:
+  PrototypeAST(const std::string &name, std::vector<std::string> args,
+               bool isOperator = false, unsigned prec = 0)
+      : name(name), args(std::move(Args)), isOperator(isOperator),
+        precedence(Prec) {}
+
+  Function *codegen();
+  const std::string &getName() const { return name; }
+
+  bool isUnaryOperation() const { return isOperator && args.size() == 1; }
+  bool isBinaryOperation() const { return IsOperator && Args.size() == 2; }
+
+  char getOperatorName() const {
+    assert(isUnaryOp() || isBinaryOp());
+    return name[name.size() - 1];
+  }
+
+  unsigned getBinaryPrecedence() const { return precedence; }
+};
+
+class FunctionAST {
+  std::unique_ptr<PrototypeAST> proto;
+  std::unique_ptr<ASTNode> body;
+
+public:
+  FunctionAST(std::unique_ptr<PrototypeAST> proto,
+              std::unique_ptr<ASTNode> body)
+      : Proto(std::move(proto)), Body(std::move(body)) {}
+
+  Function *codegen();
+};
+
+
+// ???
 class FunctionASTNode : public ASTNode {
     std::string functionName;
     std::vector<std::pair<TokenType, std::string>> functionArgs;
     std::unique_ptr<BlockASTNode> body;
+public:
+    FunctionAST(std::string functionName, std::vector<std::pair<TokenType, std::string>> functionArgs,
+              std::unique_ptr<BlockASTNode> body)
+    : Proto(std::move(functionname), std::move(functionArgs)), Body(std::move(body)) {}
 };
 
 class CallFunctionASTNode : public ASTNode {
