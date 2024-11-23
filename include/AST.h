@@ -137,7 +137,11 @@ public:
 };
 
 class WhileLoopASTNode : public ASTNode {
-    std::unique_ptr<ASTNode> a;
+public:
+    std::unique_ptr<ASTNode> condition;
+    std::unique_ptr<ASTNode> body;
+    WhileLoopASTNode(std::unique_ptr<ASTNode> cond, std::unique_ptr<ASTNode> b)
+            : condition(std::move(cond)), body(std::move(b)) {}
 };
 
 class PrototypeAST {
@@ -187,7 +191,7 @@ class FunctionASTNode : public ASTNode {
 public:
     FunctionAST(std::string functionName, std::vector<std::pair<TokenType, std::string>> functionArgs,
               std::unique_ptr<BlockASTNode> body)
-    : Proto(std::move(functionname), std::move(functionArgs)), Body(std::move(body)) {}
+    : Proto(std::move(functionName), std::move(functionArgs)), Body(std::move(body)) {}
 };
 
 class CallFunctionASTNode : public ASTNode {

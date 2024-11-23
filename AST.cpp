@@ -59,7 +59,7 @@ Value *BinaryExpressionASTNode::codeGeneration() {
   case '+':
     return Builder->CreateFAdd(left, right, "addtmp");
   case '-':
-    return Builder->CreateFSub(left, right, "subtmp");
+    return Builder->CreateFSusb(left, right, "subtmp");
   case '*':
     return Builder->CreateFMul(left, right, "multmp");
   case '<':
@@ -255,8 +255,19 @@ Value *ForLoopAST::codeGeneration() {
   return Constant::getNullValue(Type::getDoubleTy(*TheContext));
 }
 
-class WhileLoop : public ASTNode {
-    std::unique_ptr<ASTNode> a;
+class WhileLoopASTNode::codeGeneration()
+
+{
+    static int labelCount = 0;
+    std::string startLabel = "while_start_" + std::to_string(labelCount);
+    std::string endLabel = "while_end_" + std::to_string(labelCount);
+    labelCount++;
+    std::cout << startLabel << ":" << std::endl;
+    condition->codeGeneration(ir);
+    std::cout << "if_false" << " " << "goto" << std::endl;
+    body->codeGeneration(ir);
+    std::cout << "goto" << " " << startLabel << std::endl;
+    std::cout << endLabel << ":" << startLabel << std::endl;
 };
 
 Function *PrototypeAST::codeGeneration() {
@@ -307,4 +318,22 @@ Function *FunctionAST::codeGeneration() {
   if (prototype.isBinaryOp())
     BinopPrecedence.erase(prototype.getOperatorName());
   return nullptr;
+}
+
+Value *CallFunctionASTNode::codegen() {
+    Function *CalleeF = TheModule->getFunction(Callee);
+    if (!CalleeF)
+        return logError("Unknown function referenced");
+
+    if (CalleeF->arg_size() != Args.size())
+        return logError("Incorrect # arguments passed");
+
+    std::vector<Value *> ArgsV;
+    for (unsigned i = 0, e = Args.size(); i != e; ++i) {
+        ArgsV.push_back(Args[i]->codegen());
+        if (!ArgsV.back())
+            return nullptr;
+    }
+
+    return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
 }
