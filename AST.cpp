@@ -255,9 +255,7 @@ Value *ForLoopAST::codeGeneration() {
   return Constant::getNullValue(Type::getDoubleTy(*TheContext));
 }
 
-class WhileLoopASTNode::codeGeneration()
-
-{
+void *WhileLoopASTNode::codeGeneration() {
     static int labelCount = 0;
     std::string startLabel = "while_start_" + std::to_string(labelCount);
     std::string endLabel = "while_end_" + std::to_string(labelCount);
