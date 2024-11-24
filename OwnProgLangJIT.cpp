@@ -24,10 +24,10 @@ void InitializeModule() {
 //maybe move it to main or somehow pass TheJit?
 
 void AddIR(std:unique_ptr<ASTNode> &node) {
-	if (node->codeGeneration()) {
-		auto ThreadSafeMod = llvm::orc::ThreadSafeModule(std::move(Module), std::make_unique<llvm::LLVMContext>());
-	    TheJIT->addIRModule(std::move(ThreadSafeMod));
-	        
-	}
+    if (node->codeGeneration()) {
+        auto ThreadSafeMod = llvm::orc::ThreadSafeModule(std::move(TheModule), std::make_shared<llvm::LLVMContext>(TheContext));
+        TheJIT->addIRModule(std::move(ThreadSafeMod));
+
+    }
 
 }

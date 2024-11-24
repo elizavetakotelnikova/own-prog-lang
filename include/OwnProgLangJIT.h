@@ -26,6 +26,8 @@ private:
   MangleAndInterner Mangle;
   ThreadSafeContext Ctx;
 
+  JITDylib &MainJD;
+
 public:
   OwnProgLangJIT(JITTargetMachineBuilder JTMB, DataLayout DL)
       : ObjectLayer(ES,
@@ -36,9 +38,28 @@ public:
     ES.getMainJITDylib().addGenerator(
         cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
   }
+  static Expected<std::unique_ptr<KaleidoscopeJIT>> Create() {
+      auto EPC = SelfExecutorProcessControl::Create();
+      if (!EPC)
+          return EPC.takeError();
+
+      auto ES = std::make_unique<ExecutionSession>(std::move(*EPC));
+
+      JITTargetMachineBuilder JTMB(
+          ES->getExecutorProcessControl().getTargetTriple());
+
+      auto DL = JTMB.getDefaultDataLayoutForTarget();
+      if (!DL)
+          return DL.takeError();
+
+      return std::make_unique<KaleidoscopeJIT>(std::move(ES), std::move(JTMB),
+                                               std::move(*DL));
+  }
 
   void addModule(std::unique_ptr<llvm::Module> M);
   llvm::Expected<llvm::JITEvaluatedSymbol> lookup(llvm::StringRef Name);
   const llvm::DataLayout &getDataLayout() const { return DL; }
+
+
 
 #endif
