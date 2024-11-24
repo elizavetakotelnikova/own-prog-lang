@@ -3,13 +3,15 @@
 #pragma once
 
 #include "Token.hpp"
+#include "include/AST.h"
+#include "include/Token.hpp"
 #include <vector>
 #include <memory>
 
 static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<Module> TheModule;
 static std::unique_ptr<IRBuilder<>> Builder;
-static std::map<std::string, Value *> NamedValues;
+static std::map<std::string, Value*> NamedValues;
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 static ExitOnError ExitOnErr;
 
@@ -30,7 +32,7 @@ Function *getFunction(std::string Name) {
 }
 
 Value *IntegerLiteralASTNode::codeGeneration() {
-        return ConstantFP::get(*TheContext, APFloat(value));
+        return ConstantInt::get(*TheContext, APInt(value));
 }
 
 Value *FloatLiteralASTNode::codeGeneration() {
@@ -42,58 +44,156 @@ Value *DoubleLiteralASTNode::codeGeneration() {
 }
 
 Value *VariableReferencingASTNode::codeGeneration() {
-  // Look this variable up in the function.
   Value *V = NamedValues[varName];
   if (!V)
     logError("Unknown variable name");
   return V;
 }
 
-Value *BinaryExpressionASTNode::codeGeneration() {
+Value *BinaryASTNode::codeGeneration() {
   Value *left = leftOperand->codeGeneration();
   Value *right = rightOperand->codeGeneration();
   if (!left || !right)
     return nullptr;
 
-  switch (_operator.value) {
-  case '+':
-    return Builder->CreateFAdd(left, right, "addtmp");
-  case '-':
-    return Builder->CreateFSusb(left, right, "subtmp");
-  case '*':
-    return Builder->CreateFMul(left, right, "multmp");
-  case '<':
-    left = Builder->CreateFCmpULT(left, right, "cmptmp");
-    return Builder->CreateUIToFP(left, Type::getDoubleTy(*TheContext),
-                                 "booltmp");
-  default:
-    return logError("invalid binary operator");
+  Type *leftType = left->getType();
+  Type *rightType = right->getType();
+
+  if (leftType != rightType) {
+      logError("operands must be same type");
+  };
+
+  if (_operator.value == "==") {
+      if (leftType->isFloatingPointTy()) {
+          Value* res = Builder->CreateFCmpUEQ(left, right, "cmpeqtmp");
+          return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext), "booltmp");
+      }
+
+      if (leftType->isIntegerTy()) {
+          Value* res = Builder->CreateICmpEQ(left, right, "cmpeqtmp");
+          return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext), "booltmp");
+      }
   }
+
+  if (_operator.value == "!=") {
+     if (leftType->isFloatingPointTy()) {
+        Value *res = Builder->CreateFCmpUNE(left, right, "cmpnetmp");
+        return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext), "booltmp");
+     }
+
+     if (leftType->isIntegerTy()) {
+         Value *res = Builder->CreateICmpNE(left, right, "cmpnetmp");
+         return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext), "booltmp");
+     }
+
+     return logError("Invalid operand type for '!='");
+  }
+
+  if (_operator.value == ">=") {
+      if (leftType->isFloatingPointTy()) {
+          Value* res = Builder->CreateFCmpUGE(left, right, "cmpgetmp");
+          return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext), "booltmp");
+      }
+
+      if (leftType->isIntegerTy()) {
+          Value* res = Builder->CreateICmpSGE(left, right, "cmpgetmp");
+          return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext), "booltmp");
+      }
+
+      return logError("Invalid operand type for '>='");
+  }
+
+  if (_operator.value == "<=") {
+      if (leftType->isFloatingPointTy()) {
+          Value* res = Builder->CreateFCmpULE(left, right, "cmpletmp");
+          return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext), "booltmp");
+      }
+
+      if (leftType->isIntegerTy()) {
+          Value* res = Builder->CreateICmpSLE(left, right, "cmpletmp");
+          return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext), "booltmp");
+      }
+
+      return logError("Invalid operand type for '<='");
+  }
+
+  switch (_operator.value[0]) {
+      case '+':
+          return Builder->CreateFAdd(left, right, "addtmp");
+      case '-':
+          return Builder->CreateFSub(left, right, "subtmp");
+      case '*':
+          return Builder->CreateFMul(left, right, "divtmp");
+      case '/':
+           return Builder->CreateFDiv(left, right, "multmp");
+      case '<':
+           if (leftType->isFloatingPointTy()) {
+               Value* res = Builder->CreateFCmpUGT(left, right, "cmpgttmp");
+               return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext),
+                                            "booltmp");
+           }
+
+           if (leftType->isIntegerTy()) {
+               Value* res = Builder->CreateICmpULT(left, right, "cmpgttmp");
+               return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext),
+                                            "booltmp");
+           }
+
+          logError("invalid operand type");
+      case '>':
+           if (leftType->isFloatingPointTy()) {
+               Value* res = Builder->CreateFCmpUGT(left, right, "cmplttmp");
+               return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext),
+                                            "booltmp");
+           }
+
+           // or CreateUITo ??
+          if (leftType->isIntegerTy()) {
+              Value* res = Builder->CreateICmpUGT(left, right, "cmpgttmp");
+              return Builder->CreateUIToFP(res, Type::getDoubleTy(*TheContext),
+                                           "booltmp");
+          }
+
+          logError("invalid operand type");
+      default:
+          return logError("invalid binary operator");
+    }
 }
 
 class Statement : public ASTNode {
 };
 
-class StringLiteralASTNode : public ASTNode {
-    std::string value;
-public:
-    StringLiteralASTNode(std::string value): value(value){};
-    std::string getValue(){ return value; }
+Value* StringLiteralAstNode::codeGeneration() {
+    LLVMContext& Context = Module->getContext();
+
+    Constant* stringConstant = ConstantDataArray::getString(Context, value, true);
+
+    GlobalVariable* globalString = new GlobalVariable(
+            &Module,
+            stringConstant->getType(),
+            true,
+            GlobalValue::PrivateLinkage,
+            stringConstant,
+            ".str"
+    );
+
+    Value* stringPtr = Builder.CreateInBoundsGEP(
+            globalString->getValueType(),
+            globalString,
+            {Builder->getInt32(0), Builder->getInt32(0)},
+            "str_ptr"
+    );
+
+    return stringPtr;
 };
 
-class BoolLiteralASTNode : public ASTNode {
-    bool value;
-public:
-    BoolLiteralASTNode(bool value): value(value){};
-    bool getValue(){ return value; }
-};
+Value* BoolLiteralASTNode::codeGeneration() {
+    return ConstantInt::get(Builder->getInt1Ty(), value);
+}
 
-class CharLiteralASTNode : public ASTNode {
-    char value;
-public:
-    CharLiteralASTNode(char value): value(value){};
-    char getValue(){ return value; }
-};
+Value* CharLiteralASTNode::codeGeneration() {
+    return ConstantInt::get(Builder->getInt8Ty(), static_cast<uint8_t>(value));
+}
 
 class IdentifierASTNode : public ASTNode {
     std::string value;
@@ -114,14 +214,6 @@ Value *UnaryExprAST::codeGeneration() {
   return Builder->CreateCall(currFunc, operandCode, "unop");
 }
 
-class BinaryASTNode : public ASTNode {
-    Token _operator;
-    std::unique_ptr<ASTNode> leftOperand, righOperand;
-public:
-    BinaryASTNode(Token _operator, std::unique_ptr<ASTNode> leftOperand, std::unique_ptr<ASTNode> righOperand) :
-        _operator(_operator), leftOperand(std::move(leftOperand)), righOperand(move(righOperand)){};
-};
-
 class VariableDeclarationASTNode : public ASTNode {
     TokenType type; // INT, FLOAT, CHAR, STR, BOOL
     std::string varName;
@@ -131,6 +223,48 @@ public:
         varName(varName), initValue(std::move(initValue)){};
 };
 
+Value* VariableDeclarationASTNode::codeGeneration() {
+    LLVMContext& Context = Module->getContext();
+
+    Type* llvmType = nullptr;
+    switch (type) {
+        case TokenType::INT:   llvmType = Builder->getInt32Ty(); break;
+        case TokenType::FLOAT: llvmType = Builder->getFloatTy(Context); break;
+        case TokenType::CHAR:  llvmType = Builder->getInt8Ty(); break;
+        case TokenType::STR:   llvmType = Builder->getInt8PtrTy(); break;
+        case TokenType::BOOL:  llvmType = Builder->getInt1Ty(); break;
+    }
+
+    if (!llvmType) {
+        logError("Unsupported variable type");
+        return nullptr;
+    }
+
+    AllocaInst* allocaInst = Builder->CreateAlloca(llvmType, nullptr, varName);
+
+    if (initValue) {
+        Value* initVal = initValue->codeGeneration();
+
+        if (initVal->getType() != llvmType) {
+            if (llvmType->isIntegerTy() && initVal->getType()->isIntegerTy()) {
+                initVal = Builder->CreateIntCast(initVal, llvmType, true, "cast");
+            } else if (llvmType->isFloatingPointTy() && initVal->getType()->isIntegerTy()) {
+                initVal = Builder->CreateSIToFP(initVal, llvmType, "int_to_float");
+            } else if (llvmType->isIntegerTy() && initVal->getType()->isFloatingPointTy()) {
+                initVal = Builder->CreateFPToSI(initVal, llvmType, "float_to_int");
+            } else {
+                logError("Type mismatch in variable initialization");
+                return nullptr;
+            }
+        }
+
+        Builder->CreateStore(initVal, allocaInst);
+    }
+
+    NamedValues[varName] = allocaInst;
+    return allocaInst;
+}
+
 class AssignmentASTNode : public ASTNode {
     std::string varName;
     std::unique_ptr<ASTNode> value;
@@ -139,17 +273,77 @@ public:
         varName(varName), value(std::move(value)){};
 };
 
-class PrintASTNode : public ASTNode {
-    std::unique_ptr<ASTNode> expr;
-public:
-    PrintASTNode(std::unique_ptr<ASTNode> expr) : expr(std::move(expr)){};
+Value* AssigmentASTNode::codeGeneration() {
+    Value* varPtr = NamedValues[varName];
+    if (!varPtr) {
+        throw std::runtime_error("Undefined variable: " + varName);
+    }
+
+    Value* exprValue = value->codeGeneration();
+
+    llvm::Type* varType = varPtr->getType()->getPointerElementType();
+    if (exprValue->getType() != varType) {
+        if (varType->isIntegerTy() && exprValue->getType()->isIntegerTy()) {
+            exprValue = Builder.CreateIntCast(exprValue, varType, true, "cast");
+        } else if (varType->isFloatingPointTy() && exprValue->getType()->isIntegerTy()) {
+            exprValue = Builder.CreateSIToFP(exprValue, varType, "int_to_float");
+        } else if (varType->isIntegerTy() && exprValue->getType()->isFloatingPointTy()) {
+            exprValue = Builder.CreateFPToSI(exprValue, varType, "float_to_int");
+        } else {
+            throw std::runtime_error("Type mismatch in assignment to " + varName);
+        }
+    }
+
+    Builder.CreateStore(exprValue, varPtr);
+    return exprValue;
+}
+
+void *PrintASTNode::codeGeneration() {
+    /*Function *CalleeF = TheModule->getOrInsertFunction("printf",
+                                                       FunctionType::get(IntegerType::getInt32Ty(Context), PointerType::get(Type::getInt8Ty(Context), 0), true));
+    Builder.CreateCall(CalleeF, expr, "printfCall");*/
+
+    LLVMContext& Context = Module->getContext();
+    Value* value = expr->codeGeneration();
+    Type* valueType = value->getType();
+    Function* printfFunc = Module->getFunction("printf");
+    if (!printfFunc) {
+        FunctionType* printfType = FunctionType::get(
+                Builder.getInt32Ty(),
+                PointerType::get(Builder.getInt8Ty(), 0),
+                true
+        );
+        printfFunc = Function::Create(
+                printfType, Function::ExternalLinkage, "printf", &Module);
+    }
+
+    Value* formatStr = nullptr;
+    if (valueType->isIntegerTy(32)) {
+        formatStr = Builder.CreateGlobalStringPtr("%d\n", "formatStr");
+    } else if (valueType->isFloatingPointTy()) {
+        formatStr = Builder.CreateGlobalStringPtr("%f\n", "formatStr");
+    } else if (valueType->isIntegerTy(1)) {
+        formatStr = Builder.CreateGlobalStringPtr("%d\n", "formatStr");
+    } else if (valueType->isIntegerTy(8)) {
+        formatStr = Builder.CreateGlobalStringPtr("%c\n", "formatStr");
+    } else if (valueType->isPointerTy() && valueType->getPointerElementType()->isIntegerTy(8)) {
+        formatStr = Builder.CreateGlobalStringPtr("%s\n", "formatStr");
+    } else {
+        throw std::runtime_error("Unsupported type for print");
+    }
+
+    return Builder.CreateCall(printfFunc, {formatStr, value}, "printCall");
 };
 
-class BlockASTNode : public ASTNode {
-    std::vector<std::unique_ptr<ASTNode>> statementList;
-public:
-    BlockASTNode(const std::vector<std::unique_ptr<ASTNode>> statementList) :
-        statementList(std::move(statementList)){};
+Value *BlockASTNode::codeGeneration() {
+    Value* lastValue = nullptr;
+    for (const auto& statement : statementList) {
+        if (statement) {
+            lastValue = statement->codeGeneration();
+        }
+    }
+
+    return lastValue;
 };
 
 Value *ConditionASTNode::codeGeneration() {
@@ -196,9 +390,8 @@ Value *ConditionASTNode::codeGeneration() {
   return PN;
 }
 
-Value *ForLoopAST::codeGeneration() {
+Value *ForLoopASTNode::codeGeneration() {
   Function *currFunc = Builder->GetInsertBlock()->getParent();
-
   AllocaInst *allocated = CreateEntryBlockAlloca(currFunc, variableName);
 
   Value *startValue = start->codeGeneration();
@@ -255,17 +448,33 @@ Value *ForLoopAST::codeGeneration() {
   return Constant::getNullValue(Type::getDoubleTy(*TheContext));
 }
 
-void *WhileLoopASTNode::codeGeneration() {
-    static int labelCount = 0;
-    std::string startLabel = "while_start_" + std::to_string(labelCount);
-    std::string endLabel = "while_end_" + std::to_string(labelCount);
-    labelCount++;
-    std::cout << startLabel << ":" << std::endl;
-    condition->codeGeneration(ir);
-    std::cout << "if_false" << " " << "goto" << std::endl;
-    body->codeGeneration(ir);
-    std::cout << "goto" << " " << startLabel << std::endl;
-    std::cout << endLabel << ":" << startLabel << std::endl;
+Value *WhileLoopASTNode::codeGeneration() {
+    LLVMContext& Context = Module->getContext();
+    Function* parentFunction = Builder->GetInsertBlock()->getParent();
+
+    BasicBlock* condBlock = BasicBlock::Create(Context, "while.cond", parentFunction);
+    BasicBlock* bodyBlock = BasicBlock::Create(Context, "while.body", parentFunction);
+    BasicBlock* endBlock = BasicBlock::Create(Context, "while.end", parentFunction);
+
+    Builder.CreateBr(condBlock);
+    Builder.SetInsertPoint(condBlock);
+    Value* condValue = condition->codeGeneration();
+    if (!condValue) {
+        throw std::runtime_error("Failed to generate condition for while loop");
+    }
+
+    if (condValue->getType()->isIntegerTy() && condValue->getType()->getIntegerBitWidth() != 1) {
+        condValue = Builder.CreateICmpNE(condValue, Builder.getInt32(0), "while.cond.bool");
+    } else if (!condValue->getType()->isIntegerTy(1)) {
+        throw std::runtime_error("Condition of while loop must be boolean");
+    }
+
+    Builder.CreateCondBr(condValue, bodyBlock, endBlock);
+    Builder.SetInsertPoint(bodyBlock);
+    Value* bodyValue = body->codeGeneration();
+    Builder.CreateBr(condBlock);
+    Builder.SetInsertPoint(endBlock);
+    return nullptr;
 };
 
 Function *PrototypeAST::codeGeneration() {
@@ -318,7 +527,7 @@ Function *FunctionAST::codeGeneration() {
   return nullptr;
 }
 
-Value *CallFunctionASTNode::codegen() {
+Value *CallFunctionASTNode::codeGeneration() {
     Function *CalleeF = TheModule->getFunction(Callee);
     if (!CalleeF)
         return logError("Unknown function referenced");
@@ -328,7 +537,7 @@ Value *CallFunctionASTNode::codegen() {
 
     std::vector<Value *> ArgsV;
     for (unsigned i = 0, e = Args.size(); i != e; ++i) {
-        ArgsV.push_back(Args[i]->codegen());
+        ArgsV.push_back(Args[i]->codeGeneration());
         if (!ArgsV.back())
             return nullptr;
     }

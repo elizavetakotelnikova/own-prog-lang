@@ -1,2 +1,34 @@
-# Cобственный язык программирования 
-Пока тут пусто, нужно будет оформить
+# Precedence rules
+
+expression      → assignment;
+assignment      → IDENTIFIER "=" assignment 
+                | logical_or
+logical_or      → logical_and ( ( "||" ) logical_and )*;
+logical_and     → bitwise_or ( ( "&&" ) bitwise_or )*;
+bitwise_or      → bitwise_xor ( ( "|" ) bitwise_xor )*;
+bitwise_xor     → bitwise_and ( ( "^" ) bitwise_and )*;
+bitwise_and     → equality( ( "&" ) equality )*;
+equality        → comparison ( ( "!=" | "==" ) comparison )* ;
+comparison      → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+term            → factor ( ( "-" | "+" ) factor )* ;
+factor          → unary ( ( "/" | "*" | "%" ) unary )* ;
+unary           → ( "!" | "-" ) unary
+                | primary ;
+primary         → NUMBER | STRING | "true" | "false" | IDENTIFIER
+                | "(" expression ")" ;
+
+
+Statements
+
+program        → statement* EOF ;
+
+statement      → varDeclaration
+               | print
+               | block
+               | condition
+               | forLoop
+               | whileLoop ;
+
+varDecl        → TYPE IDENTIFIER ( "=" expression )? ";" ;
+block          → "{" declaration* "}" ;
+printStmt      → "print" "(" expression ")" ";"; 

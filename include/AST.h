@@ -10,10 +10,10 @@ public:
     virtual Value *codeGeneration() = 0;
 };
 
-class Expression : public ASTNode {
+class ExpressionASTNode : public ASTNode {
 };
 
-class Statement : public ASTNode {
+class StatementASTNode : public ASTNode {
 };
 
 class IntegerLiteralASTNode : public ASTNode {
@@ -75,10 +75,10 @@ public:
 
 class BinaryASTNode : public ASTNode {
     Token _operator;
-    std::unique_ptr<ASTNode> leftOperand, righOperand;
+    std::unique_ptr<ASTNode> leftOperand, rightOperand;
 public:
-    BinaryASTNode(Token _operator, std::unique_ptr<ASTNode> leftOperand, std::unique_ptr<ASTNode> righOperand) :
-        _operator(_operator), leftOperand(std::move(leftOperand)), righOperand(move(righOperand)){};
+    BinaryASTNode(Token _operator, std::unique_ptr<ASTNode> leftOperand, std::unique_ptr<ASTNode> rightOperand) :
+        _operator(_operator), leftOperand(std::move(leftOperand)), rightOperand(std::move(rightOperand)){};
 };
 
 class VariableDeclarationASTNode : public ASTNode {
@@ -127,11 +127,11 @@ public:
 
 class ForLoopASTNode : public ASTNode {
   std::string variableName;
-  std::unique_ptr<ExprAST> start, end, step, body;
+  std::unique_ptr<ExpressionASTNode> start, end, step, body;
 public:
-  ForLoopASTNode(const std::string &variableName, std::unique_ptr<ExprAST> start,
-             std::unique_ptr<ExprAST> end, std::unique_ptr<ExprAST> step,
-             std::unique_ptr<ExprAST> body)
+  ForLoopASTNode(const std::string &variableName, std::unique_ptr<ExpressionASTNode> start,
+             std::unique_ptr<ExpressionASTNode> end, std::unique_ptr<ExpressionASTNode> step,
+             std::unique_ptr<ExpressionASTNode> body)
       : variableName(variableName), Start(std::move(start)), End(std::move(end)),
         Step(std::move(step)), Body(std::move(body)) {}
 };
@@ -146,17 +146,17 @@ public:
 
 class PrototypeAST {
   std::string name;
-  std::vector<std::string> args;
+  std::vector<std::pair<TokenType, std::string> args;
   bool isOperator;
   unsigned precedence;
 
 public:
-  PrototypeAST(const std::string &name, std::vector<std::string> args,
+  PrototypeAST(const std::string &name, std::vector<std::pair<TokenType, std::string> args;,
                bool isOperator = false, unsigned prec = 0)
       : name(name), args(std::move(Args)), isOperator(isOperator),
         precedence(Prec) {}
 
-  Function *codegen();
+  Function *codeGeneration();
   const std::string &getName() const { return name; }
 
   bool isUnaryOperation() const { return isOperator && args.size() == 1; }
@@ -179,20 +179,9 @@ public:
               std::unique_ptr<ASTNode> body)
       : Proto(std::move(proto)), Body(std::move(body)) {}
 
-  Function *codegen();
+  Function *codeGeneration();
 };
 
-
-// ???
-class FunctionASTNode : public ASTNode {
-    std::string functionName;
-    std::vector<std::pair<TokenType, std::string>> functionArgs;
-    std::unique_ptr<BlockASTNode> body;
-public:
-    FunctionAST(std::string functionName, std::vector<std::pair<TokenType, std::string>> functionArgs,
-              std::unique_ptr<BlockASTNode> body)
-    : Proto(std::move(functionName), std::move(functionArgs)), Body(std::move(body)) {}
-};
 
 class CallFunctionASTNode : public ASTNode {
     std::string functionName;
