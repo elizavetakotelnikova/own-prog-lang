@@ -5,12 +5,27 @@ llvm::LLVMContext TheContext;
 std::unique_ptr<llvm::Module> TheModule;
 std::unique_ptr<llvm::IRBuilder<>> Builder;
 
+llvm::orc::ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST, const std::string &Suffix) {
+    FnAST.codeGeneration();
+    return llvm::orc::ThreadSafeModule(std::move(TheModule), std::make_unique<llvm::LLVMContext>());
+}
+
 Expected<std::unique_ptr<OwnProgLangJIT>> OwnProgLangJIT::Create() {
     auto EPC = SelfExecutorProcessControl::Create();
     if (!EPC)
         return EPC.takeError();
 
     auto ES = std::make_unique<ExecutionSession>(std::move(*EPC));
+
+    auto EPCIU = EPCIndirectionUtils::Create(*ES);
+    if (!EPCIU)
+        return EPCIU.takeError();
+
+    (*EPCIU)->createLazyCallThroughManager(
+        *ES, ExecutorAddr::fromPtr(&handleLazyCallThroughError));
+
+    if (auto Err = setUpInProcessLCTMReentryViaEPCIU(**EPCIU))
+        return std::move(Err);
 
     JITTargetMachineBuilder JTMB(
         ES->getExecutorProcessControl().getTargetTriple());
@@ -28,6 +43,12 @@ Error OwnProgLangJIT::addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nul
         RT = MainJD.getDefaultResourceTracker();
 
     return TransformLayer.add(RT, std::move(TSM));
+}
+
+Error OwnProgLangJIT::addAST(std::unique_ptr<FunctionAST> F, ResourceTrackerSP RT = nullptr) {
+    if (!RT)
+        RT = MainJD.getDefaultResourceTracker();
+    return ASTLayer.add(RT, std::move(F));
 }
 
 Expected<llvm::JITEvaluatedSymbol> OwnProgLangJIT::lookup(llvm::StringRef Name) {
@@ -54,19 +75,28 @@ Expected<ThreadSafeModule> OwnProgLangJIT::optimizeModule(ThreadSafeModule TSM, 
     return std::move(M);
 }
 
+void OwnProgLangASTMaterializationUnit::materialize(std::unique_ptr<MaterializationResponsibility> R) {
+    L.emit(std::move(R), std::move(F));
+}
+
+void OwnProgLangASTLayer::emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<FunctionAST> F) {
+    BaseLayer.emit(std::move(MR), irgenAndTakeOwnership(*F, ""));
+}
+
+MaterializationUnit::Interface OwnProgLangASTLayer::getInterface(FunctionAST &F) {
+    MangleAndInterner Mangle(BaseLayer.getExecutionSession(), DL);
+    SymbolFlagsMap Symbols;
+    // have to change later, might not work :_), cause proto is private ig
+    Symbols[Mangle(F.proto.getName())] = JITSymbolFlags(JITSymbolFlags::Exported | JITSymbolFlags::Callable);
+    return MaterializationUnit::Interface(std::move(Symbols), nullptr);
+}
+
+Error OwnProgLangASTLayer::add(ResourceTrackerSP RT, std::unique_ptr<FunctionAST> F) {
+    return RT->getJITDylib().define(std::make_unique<OwnProgLangASTMaterializationUnit>(*this, std::move(F)), RT);
+}
+
 void InitializeModule() {
     TheContext = llvm::LLVMContext();
     TheModule = std::make_unique<llvm::Module>("OwnProgLang", TheContext);
     Builder = std::make_unique<llvm::IRBuilder<>>(TheContext);
-}
-
-//maybe move it to main or somehow pass TheJit?
-
-void AddIR(std:unique_ptr<ASTNode> &node) {
-    if (node->codeGeneration()) {
-        auto ThreadSafeMod = llvm::orc::ThreadSafeModule(std::move(TheModule), std::make_shared<llvm::LLVMContext>(TheContext));
-        TheJIT->addIRModule(std::move(ThreadSafeMod));
-
-    }
-
 }
