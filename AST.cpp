@@ -1,5 +1,3 @@
-// Implement each node here with codeGenerationeration function pls
-
 #pragma once
 
 #include "Token.hpp"
@@ -202,6 +200,16 @@ public:
     std::string getValue(){ return value; }
 };
 
+Value* IdentifierASTNode::codeGeneration() {
+    Value* result = codeGen.getSymbolValue(value);
+
+    if (!result) {
+        throw std::runtime_error("Undefined identifier: " + value);
+    }
+
+    return result;
+}
+
 Value *UnaryExprAST::codeGeneration() {
   Value *operandCode = operand->codeGeneration();
   if (!operandCode)
@@ -213,15 +221,6 @@ Value *UnaryExprAST::codeGeneration() {
 
   return Builder->CreateCall(currFunc, operandCode, "unop");
 }
-
-class VariableDeclarationASTNode : public ASTNode {
-    TokenType type; // INT, FLOAT, CHAR, STR, BOOL
-    std::string varName;
-    std::unique_ptr<ASTNode> initValue;
-public:
-    VariableDeclarationASTNode(const std::string& varName, std::unique_ptr<ASTNode> initValue) :
-        varName(varName), initValue(std::move(initValue)){};
-};
 
 Value* VariableDeclarationASTNode::codeGeneration() {
     LLVMContext& Context = Module->getContext();
@@ -264,14 +263,6 @@ Value* VariableDeclarationASTNode::codeGeneration() {
     NamedValues[varName] = allocaInst;
     return allocaInst;
 }
-
-class AssignmentASTNode : public ASTNode {
-    std::string varName;
-    std::unique_ptr<ASTNode> value;
-public:
-    AssignmentASTNode(const std::string& varName, std::unique_ptr<ASTNode> value) :
-        varName(varName), value(std::move(value)){};
-};
 
 Value* AssigmentASTNode::codeGeneration() {
     Value* varPtr = NamedValues[varName];
@@ -477,8 +468,8 @@ Value *WhileLoopASTNode::codeGeneration() {
     return nullptr;
 };
 
-Function *PrototypeAST::codeGeneration() {
-  std::vector<Type *> Doubles(args.size(), Type::getDoubleTy(*TheContext));
+/*Function *PrototypeAST::codeGeneration() {
+  std::vector<Type*> Doubles(args.size(), Type::getDoubleTy(*TheContext));
   FunctionType *funcType =
       FunctionType::get(Type::getDoubleTy(*TheContext), Doubles, false);
 
@@ -490,6 +481,43 @@ Function *PrototypeAST::codeGeneration() {
     Arg.setName(args[index++]);
 
   return func;
+}*/
+
+Function *PrototypeAST::codeGeneration() {
+    std::vector<Type*> argsNumbers(args.size());
+    for (int i = 0; i < args.size(); i++) {
+        if (args.first.type == TokenType.INT) {
+            argsNumbers[i] = Type::getINT32Ty(*TheContext)
+        }
+
+        if (args.first.type == TokenType.DOUBLE) {
+            argsNumbers[i] = Type::getDoubleTy(*TheContext)
+        }
+
+        if (args.first.type == TokenType.FLOAT) {
+            argsNumbers[i] = Type::getFloatTy(*TheContext)
+        }
+
+        if (args.first.type == TokenType.FLOAT) {
+            argsNumbers[i] = Type::getINT8Ty(*TheContext)
+        }
+
+        if (args.first.type == TokenType.BOOL) {
+            argsNumbers[i] = Type::getINT1Ty(*TheContext)
+        }
+    }
+
+    FunctionType *funcType =
+            FunctionType::get(Type::getDoubleTy(*TheContext), Doubles, false);
+
+    Function *func =
+            Function::Create(funcType, Function::ExternalLinkage, name, TheModule.get());
+
+    unsigned index = 0;
+    for (auto &Arg : func->args())
+        Arg.setName(args[index++]);
+
+    return func;
 }
 
 Function *FunctionAST::codeGeneration() {
