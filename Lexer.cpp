@@ -158,7 +158,7 @@ void Lexer::scanToken()
         tokenList.push_back(Token(LEFT_SQUARE, "["));
         break;
     case ']':
-        tokenList.push_back(Token(RIGHT_SQAURE, "]"));
+        tokenList.push_back(Token(RIGHT_SQUARE, "]"));
         break;
     case '{':
         tokenList.push_back(Token(LEFT_BRACE, "{"));

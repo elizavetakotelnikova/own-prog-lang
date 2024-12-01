@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Token.hpp"
 #include "include/AST.h"
 #include "include/Token.hpp"
 #include <vector>
@@ -29,26 +28,26 @@ Function *getFunction(std::string Name) {
   return nullptr;
 }
 
-Value *IntegerLiteralASTNode::codeGeneration() {
+Value *IntegerLiteral::codeGeneration() {
         return ConstantInt::get(*TheContext, APInt(value));
 }
 
-Value *FloatLiteralASTNode::codeGeneration() {
+Value *FloatLiteral::codeGeneration() {
         return ConstantFP::get(*TheContext, APFloat(value));
 }
 
-Value *DoubleLiteralASTNode::codeGeneration() {
+Value *DoubleLiteral::codeGeneration() {
         return ConstantFP::get(*TheContext, APFloat(value));
 }
 
-Value *VariableReferencingASTNode::codeGeneration() {
+Value *VariableReferencing::codeGeneration() {
   Value *V = NamedValues[varName];
   if (!V)
     logError("Unknown variable name");
   return V;
 }
 
-Value *BinaryASTNode::codeGeneration() {
+Value *Binary::codeGeneration() {
   Value *left = leftOperand->codeGeneration();
   Value *right = rightOperand->codeGeneration();
   if (!left || !right)
@@ -158,10 +157,8 @@ Value *BinaryASTNode::codeGeneration() {
     }
 }
 
-class Statement : public ASTNode {
-};
 
-Value* StringLiteralAstNode::codeGeneration() {
+Value* StringLiteral::codeGeneration() {
     LLVMContext& Context = Module->getContext();
 
     Constant* stringConstant = ConstantDataArray::getString(Context, value, true);
@@ -185,22 +182,15 @@ Value* StringLiteralAstNode::codeGeneration() {
     return stringPtr;
 };
 
-Value* BoolLiteralASTNode::codeGeneration() {
+Value* BoolLiteral::codeGeneration() {
     return ConstantInt::get(Builder->getInt1Ty(), value);
 }
 
-Value* CharLiteralASTNode::codeGeneration() {
+Value* CharLiteral::codeGeneration() {
     return ConstantInt::get(Builder->getInt8Ty(), static_cast<uint8_t>(value));
 }
 
-class IdentifierASTNode : public ASTNode {
-    std::string value;
-public:
-    IdentifierASTNode(const std::string& value) : value(value){};
-    std::string getValue(){ return value; }
-};
-
-Value* IdentifierASTNode::codeGeneration() {
+Value* Identifier::codeGeneration() {
     Value* result = codeGen.getSymbolValue(value);
 
     if (!result) {
@@ -222,7 +212,7 @@ Value *UnaryExprAST::codeGeneration() {
   return Builder->CreateCall(currFunc, operandCode, "unop");
 }
 
-Value* VariableDeclarationASTNode::codeGeneration() {
+Value* VariableDeclaration::codeGeneration() {
     LLVMContext& Context = Module->getContext();
 
     Type* llvmType = nullptr;
@@ -264,7 +254,7 @@ Value* VariableDeclarationASTNode::codeGeneration() {
     return allocaInst;
 }
 
-Value* AssigmentASTNode::codeGeneration() {
+Value* Assigment::codeGeneration() {
     Value* varPtr = NamedValues[varName];
     if (!varPtr) {
         throw std::runtime_error("Undefined variable: " + varName);
@@ -289,7 +279,7 @@ Value* AssigmentASTNode::codeGeneration() {
     return exprValue;
 }
 
-void *PrintASTNode::codeGeneration() {
+void *Print::codeGeneration() {
     /*Function *CalleeF = TheModule->getOrInsertFunction("printf",
                                                        FunctionType::get(IntegerType::getInt32Ty(Context), PointerType::get(Type::getInt8Ty(Context), 0), true));
     Builder.CreateCall(CalleeF, expr, "printfCall");*/
@@ -326,7 +316,7 @@ void *PrintASTNode::codeGeneration() {
     return Builder.CreateCall(printfFunc, {formatStr, value}, "printCall");
 };
 
-Value *BlockASTNode::codeGeneration() {
+Value *Block::codeGeneration() {
     Value* lastValue = nullptr;
     for (const auto& statement : statementList) {
         if (statement) {
@@ -337,7 +327,7 @@ Value *BlockASTNode::codeGeneration() {
     return lastValue;
 };
 
-Value *ConditionASTNode::codeGeneration() {
+Value *Condition::codeGeneration() {
   Value *condition = ifBlock->codeGeneration();
   if (!condition)
     return nullptr;
@@ -381,7 +371,7 @@ Value *ConditionASTNode::codeGeneration() {
   return PN;
 }
 
-Value *ForLoopASTNode::codeGeneration() {
+Value *ForLoop::codeGeneration() {
   Function *currFunc = Builder->GetInsertBlock()->getParent();
   AllocaInst *allocated = CreateEntryBlockAlloca(currFunc, variableName);
 
@@ -439,7 +429,7 @@ Value *ForLoopASTNode::codeGeneration() {
   return Constant::getNullValue(Type::getDoubleTy(*TheContext));
 }
 
-Value *WhileLoopASTNode::codeGeneration() {
+Value *WhileLoop::codeGeneration() {
     LLVMContext& Context = Module->getContext();
     Function* parentFunction = Builder->GetInsertBlock()->getParent();
 
@@ -555,7 +545,7 @@ Function *FunctionAST::codeGeneration() {
   return nullptr;
 }
 
-Value *CallFunctionASTNode::codeGeneration() {
+Value *CallFunction::codeGeneration() {
     Function *CalleeF = TheModule->getFunction(Callee);
     if (!CalleeF)
         return logError("Unknown function referenced");

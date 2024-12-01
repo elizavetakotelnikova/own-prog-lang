@@ -1,7 +1,6 @@
 #include "include/Parser.h"
 #include <string>
 #include <typeinfo>
-#include "Parser.h"
 
 using namespace std;
 
@@ -25,25 +24,30 @@ unique_ptr<ASTNode> Parser::logError(string error){
     return nullptr;
 }
 
+// Get current token and move to next token
 unique_ptr<Token> Parser::getToken(){
     return make_unique<Token>(tokenList.at(current++));
 }
 
+// Get current token
 unique_ptr<Token> Parser::currentToken(){
     return make_unique<Token>(tokenList.at(current));
 }
 
+// Get next token
 unique_ptr<Token> Parser::nextToken(){
     if (current >= tokenList.size()) return nullptr;
     return make_unique<Token>(tokenList.at(current + 1));
 }
 
+// Get previous token
 unique_ptr<Token> Parser::previousToken(){
     if (current <= 0) return nullptr;
     return make_unique<Token>(tokenList.at(current - 1));
 }
 
-std::unique_ptr<Token> Parser::consumeToken(TokenType type, std::string errorMessage)
+// Consume this token if its type match the required type, or else print out error
+unique_ptr<Token> Parser::consumeToken(TokenType type, string errorMessage)
 {
     if (currentToken()->type == type){
         return getToken();
@@ -51,201 +55,339 @@ std::unique_ptr<Token> Parser::consumeToken(TokenType type, std::string errorMes
     throw runtime_error(errorMessage);
 }
 
-std::unique_ptr<ASTNode> Parser::statement()
+unique_ptr<Statement> Parser::statement()
 {
     if (matchToken({INT, FLOAT, STR, CHAR, BOOL})) return variableDeclaration();
+    if (matchToken({ARRAY})) return arrayDeclaration();
     if (matchToken({PRINT})) return print();
     if (matchToken({LEFT_BRACE})) return block();
     if (matchToken({IF})) return condition();
-    if (matchToken({FOR, WHILE}))
-    return nullptr;
+    if (matchToken({FOR})) return forLoop();
+    if (matchToken({WHILE})) return whileLoop();
+    if (matchToken({RETURN})) return returnStmt();
+    return expressionStatement();
 }
 
-std::unique_ptr<ASTNode> Parser::variableDeclaration()
+unique_ptr<Statement> Parser::variableDeclaration()
 {
     TokenType type = previousToken()->type;
     string varName = consumeToken(IDENTIFIER, "expect variable name")->value;
-    unique_ptr<ASTNode> initValue = nullptr;
+    auto identifier = make_unique<Identifier>(varName);
+    unique_ptr<Expression> initValue = nullptr;
     if (matchToken({EQUAL})){
         initValue = expression();
-    }
-    if (initValue == nullptr){
-        throw runtime_error("expect primary expression");
+        if (initValue == nullptr){
+            throw runtime_error("expect primary expression");
+        }
     }
     consumeToken(SEMICOLON, "expect a ';'");
-    return make_unique<VariableDeclarationASTNode>(type, varName, initValue);
+    return make_unique<VariableDeclaration>(type, move(identifier), move(initValue));
 }
 
-std::unique_ptr<ASTNode> Parser::condition()
+unique_ptr<Statement> Parser::arrayDeclaration()
 {
-return std::unique_ptr<ASTNode>();
+    if (!matchToken({INT, FLOAT, STR, CHAR, BOOL})) throw runtime_error("expect type");
+    TokenType type = previousToken()->type;
+    string varName = consumeToken(IDENTIFIER, "expect variable name")->value;
+    auto identifier = make_unique<Identifier>(varName);
+    consumeToken(LEFT_SQUARE, "expect a '['");
+    if (currentToken()->type != NUMBER_INT){
+        throw runtime_error("Size requires positive int value");
+    }
+    int size = stoi(getToken()->value);
+    if (size < 0){
+        throw runtime_error("Size requires positive int value");
+    }
+    consumeToken(RIGHT_SQUARE, "expect a ']'");
+
+    vector<unique_ptr<Expression>> initValues;
+    if (matchToken({EQUAL})){
+        consumeToken(LEFT_BRACE, "expect a '{'");
+        if (!matchToken({RIGHT_BRACE})){
+            while (true){  
+                auto initValue = expression();
+                if (initValue == nullptr){
+                    throw runtime_error("expect primary expression");
+                }
+                initValues.push_back(move(initValue));
+                if (matchToken({COMMA})){
+                    continue;
+                }
+                else if (matchToken({RIGHT_BRACE})){
+                    break;
+                }
+                else {
+                    throw runtime_error("expect a '}'");
+                }
+            }
+        }
+    }
+    consumeToken(SEMICOLON, "expect a ';'");
+    return make_unique<ArrayDeclaration>(type, move(identifier), size, move(initValues));
 }
 
-std::unique_ptr<ASTNode> Parser::forLoop()
-{
-return std::unique_ptr<ASTNode>();
-}
-
-std::unique_ptr<ASTNode> Parser::whileLoop()
-{
-return std::unique_ptr<ASTNode>();
-}
-
-std::unique_ptr<ASTNode> Parser::function()
-{
-return std::unique_ptr<ASTNode>();
-}
-
-std::unique_ptr<ASTNode> Parser::print()
+unique_ptr<Statement> Parser::condition()
 {
     consumeToken(LEFT_PAREN, "expect a '('");
-    auto expr = logicalOR();
+    auto conditionalExpr = logicalOR();
     consumeToken(RIGHT_PAREN, "expect a ')'");
-    consumeToken(SEMICOLON, "expect a ';'");
-    return make_unique<PrintASTNode>(expr);
+    auto ifBlock = statement(); 
+    unique_ptr<Statement> elseBlock = nullptr;
+    if (matchToken({ELSE})){
+        elseBlock = statement();
+    }
+    return make_unique<Condition>(move(conditionalExpr), move(ifBlock), move(elseBlock));
 }
 
-std::unique_ptr<ASTNode> Parser::block()
+unique_ptr<Statement> Parser::forLoop()
 {
-    vector<unique_ptr<ASTNode>> statementList;
+    consumeToken(LEFT_PAREN, "expect a '('");
+    unique_ptr<Statement> initializer;
+    if (matchToken({SEMICOLON})){
+        initializer = nullptr;
+    } else if (matchToken({INT, FLOAT, STR, CHAR, BOOL})) {
+        initializer = variableDeclaration();
+    } else {
+        initializer = expressionStatement();
+    }
+
+    unique_ptr<Expression> condition = nullptr;
+    if (currentToken()->type != SEMICOLON){
+        condition = expression();
+    } 
+    consumeToken(SEMICOLON, "expect a ';'");
+
+    unique_ptr<Expression> update =  nullptr;
+    if (currentToken()->type != RIGHT_BRACE){
+        update = expression();
+    }
+    consumeToken(RIGHT_PAREN, "expect a ')'");
+
+    auto body = statement();
+    
+    return make_unique<ForLoop>(move(initializer), move(condition), move(update), move(body));
+}
+
+unique_ptr<Statement> Parser::whileLoop()
+{
+    consumeToken(LEFT_PAREN, "expect a '('");
+    auto condition= logicalOR();
+    consumeToken(RIGHT_PAREN, "expect a ')'");
+    auto body = statement();
+    return make_unique<WhileLoop>(move(condition), move(body));
+}
+
+std::unique_ptr<Statement> Parser::prototypeFunction()
+{
+    string functionName = consumeToken(IDENTIFIER, "expect an identifier")->value;
+    consumeToken(LEFT_PAREN, "expect a '('");
+    vector<pair<TokenType, string>> functionArgs;
+    if (!matchToken({RIGHT_PAREN})){
+        while (true){
+            if (!matchToken({INT, FLOAT, STR, CHAR, BOOL})){
+                throw runtime_error("expect argument type");
+            }
+            TokenType argType = previousToken()->type;
+            string argName = consumeToken(IDENTIFIER, "expect parameter name")->value;
+            functionArgs.push_back({argType, argName});
+            if (matchToken({COMMA})){
+                continue;
+            }
+            else if (matchToken({RIGHT_PAREN})){
+                break;
+            }
+            else {
+                throw runtime_error("expect a ')'");
+            }
+        }
+    }
+    
+    consumeToken(RETURN_TYPE, "expect return type");
+    if (!matchToken({INT, FLOAT, STR, CHAR, BOOL, VOID})){
+        throw runtime_error("expect return type");
+    }
+    auto returnType = previousToken()->type;
+    return make_unique<PrototypeFunction>(functionName, functionArgs, returnType);
+}
+
+unique_ptr<Statement> Parser::function()
+{
+    auto proto = prototypeFunction();
+    consumeToken(LEFT_BRACE, "expect a '{'");
+    auto body = block();
+    return make_unique<Function>(
+        unique_ptr<PrototypeFunction>(static_cast<PrototypeFunction*>(proto.release())),
+        unique_ptr<Block>(static_cast<Block*>(body.release()))
+    );
+}
+
+std::unique_ptr<Statement> Parser::returnStmt()
+{
+    auto expr = expression();
+    consumeToken(SEMICOLON, "expect a ';'");
+    return make_unique<Return>(move(expr));
+}
+
+unique_ptr<Statement> Parser::expressionStatement()
+{
+    auto expr = expression();
+    consumeToken(SEMICOLON, "expect a ';'");
+    return make_unique<ExpressionStatement>(move(expr));
+}
+
+unique_ptr<Statement> Parser::print()
+{
+    consumeToken(LEFT_PAREN, "expect a '('");
+    auto expr = expression();
+    consumeToken(RIGHT_PAREN, "expect a ')'");
+    consumeToken(SEMICOLON, "expect a ';'");
+    return make_unique<Print>(move(expr));
+}
+
+unique_ptr<Statement> Parser::block()
+{
+    vector<unique_ptr<Statement>> statementList;
     while (currentToken()->type != RIGHT_BRACE){
         auto stmt = statement();
         if (stmt != nullptr){
-            statementList.push_back(stmt);
+            statementList.push_back(move(stmt));
         }
     }
-    return make_unique<BlockASTNode>(statementList);
+    consumeToken(RIGHT_BRACE, "expect a '}'");
+    return make_unique<Block>(move(statementList));
 }
 
-unique_ptr<ASTNode> Parser::expression(){
-    return logicalOR();
+unique_ptr<Expression> Parser::expression(){
+    return assignment();
 }
 
-std::unique_ptr<ASTNode> Parser::assignment()
+unique_ptr<Expression> Parser::assignment()
 {
     auto expr = logicalOR();
     if (matchToken({EQUAL})){
-        auto value = assignment();
-        if (typeid(*expr) == typeid(IdentifierASTNode)){
-            string varName = (static_cast<IdentifierASTNode*>(expr.release()))->getValue();
-            return make_unique<AssignmentASTNode>(varName, value);
+        auto value = expression();
+        if (value == nullptr){
+            throw runtime_error("expect primary expression");
+        }
+        if (typeid(*expr) == typeid(Identifier)){
+            return make_unique<Assignment>(move(expr), move(value));
         }
         throw runtime_error("Invalid assignment target");
     }
     return expr;
 }
 
-unique_ptr<ASTNode> Parser::logicalOR()
+unique_ptr<Expression> Parser::logicalOR()
 {
     auto expr = logicalAND();
     while (matchToken({LOGICAL_OR})){
         Token _operator = *previousToken();
         auto right = logicalAND();
-        expr = make_unique<BinaryASTNode>(_operator, expr, right);
+        expr = make_unique<Binary>(_operator, move(expr), move(right));
     }
     return expr;
 }
 
-unique_ptr<ASTNode> Parser::logicalAND()
+unique_ptr<Expression> Parser::logicalAND()
 {
     auto expr = bitwiseOR();
     while (matchToken({LOGICAL_AND})){
         Token _operator = *previousToken();
         auto right = bitwiseOR();
-        expr = make_unique<BinaryASTNode>(_operator, expr, right);
+        expr = make_unique<Binary>(_operator, move(expr), move(right));
     }
     return expr;
 }
 
-unique_ptr<ASTNode> Parser::bitwiseOR()
+unique_ptr<Expression> Parser::bitwiseOR()
 {
     auto expr = bitwiseXOR();
     while (matchToken({BITWISE_OR})){
         Token _operator = *previousToken();
         auto right = bitwiseXOR();
-        expr = make_unique<BinaryASTNode>(_operator, expr, right);
+        expr = make_unique<Binary>(_operator, move(expr), move(right));
     }
     return expr;
 }
 
-unique_ptr<ASTNode> Parser::bitwiseXOR()
+unique_ptr<Expression> Parser::bitwiseXOR()
 {
     auto expr = bitwiseAND();
     while (matchToken({BITWISE_XOR})){
         Token _operator = *previousToken();
         auto right = bitwiseAND();
-        expr = make_unique<BinaryASTNode>(_operator, expr, right);
+        expr = make_unique<Binary>(_operator, move(expr), move(right));
     }
     return expr;
 }
 
-unique_ptr<ASTNode> Parser::bitwiseAND()
+unique_ptr<Expression> Parser::bitwiseAND()
 {
     auto expr = equality();
     while (matchToken({BITWISE_AND})){
         Token _operator = *previousToken();
         auto right = equality();
-        expr = make_unique<BinaryASTNode>(_operator, expr, right);
+        expr = make_unique<Binary>(_operator, move(expr), move(right));
     }
     return expr;
 }
 
-unique_ptr<ASTNode> Parser::equality(){
+unique_ptr<Expression> Parser::equality(){
     auto expr = comparison();
     while (matchToken({EQUAL_EQUAL, NOT_EQUAL})){
         Token _operator = *previousToken();
         auto right = comparison();
-        expr = make_unique<BinaryASTNode>(_operator, expr, right);
+        expr = make_unique<Binary>(_operator, move(expr), move(right));
     }
     return expr;
 }
 
-unique_ptr<ASTNode> Parser::comparison(){
+unique_ptr<Expression> Parser::comparison(){
     auto expr = term();
     while (matchToken({GREATER, GREATER_EQUAL, LESS, LESS_EQUAL})){
         Token _operator = *previousToken();
         auto right = term();
-        expr = make_unique<BinaryASTNode>(_operator, expr, right);
+        expr = make_unique<Binary>(_operator, move(expr), move(right));
     }
     return expr;
 }
 
-unique_ptr<ASTNode> Parser::term(){
+unique_ptr<Expression> Parser::term(){
     auto expr = factor();
     while (matchToken({PLUS, MINUS})){
         Token _operator = *previousToken();
         auto right = factor();
-        expr = make_unique<BinaryASTNode>(_operator, expr, right);
+        expr = make_unique<Binary>(_operator, move(expr), move(right));
     }
     return expr;
 }
 
-unique_ptr<ASTNode> Parser::factor(){
+unique_ptr<Expression> Parser::factor(){
     auto expr = unary();
     while (matchToken({MULTIPLY, DIVIVE, MODULO})){
         Token _operator = *previousToken();
         auto right = unary();
-        expr = make_unique<BinaryASTNode>(_operator, expr, right);
+        expr = make_unique<Binary>(_operator, move(expr), move(right));
     }
     return expr;
 }
 
-unique_ptr<ASTNode> Parser::unary(){
+unique_ptr<Expression> Parser::unary(){
     if (matchToken({NOT, MINUS})){
         Token _operator = *previousToken();
         auto right = unary();
-        return make_unique<UnaryASTNode>(_operator, right);
+        return make_unique<Unary>(_operator, move(right));
     }
     return primary();
 }
 
-unique_ptr<ASTNode> Parser::primary(){
-    if (matchToken({FALSE})) return make_unique<BoolLiteralASTNode>(false);
-    if (matchToken({TRUE})) return make_unique<BoolLiteralASTNode>(true);
-    if (matchToken({NUMBER_INT})) return make_unique<IntegerLiteralASTNode>(stoi(previousToken()->value));
-    if (matchToken({NUMBER_FLOAT})) return make_unique<FloatLiteralASTNode>(stof(previousToken()->value));
-    if (matchToken({CHARACTER})) return make_unique<CharLiteralASTNode>(previousToken()->value[0]);
-    if (matchToken({STRING})) return make_unique<StringLiteralASTNode>(previousToken()->value);
+unique_ptr<Expression> Parser::primary(){
+    if (matchToken({FALSE})) return make_unique<BoolLiteral>(false);
+    if (matchToken({TRUE})) return make_unique<BoolLiteral>(true);
+    if (matchToken({NUMBER_INT})) return make_unique<IntegerLiteral>(stoi(previousToken()->value));
+    if (matchToken({NUMBER_FLOAT})) return make_unique<FloatLiteral>(stof(previousToken()->value));
+    if (matchToken({CHARACTER})) return make_unique<CharLiteral>(previousToken()->value[0]);
+    if (matchToken({STRING})) return make_unique<StringLiteral>(previousToken()->value);
     if (matchToken({IDENTIFIER})) return identifier();
     if (matchToken({LEFT_PAREN})){
         auto expr = expression();
@@ -255,38 +397,68 @@ unique_ptr<ASTNode> Parser::primary(){
     return nullptr;
 }
 
-std::unique_ptr<ASTNode> Parser::identifier()
+unique_ptr<Expression> Parser::identifier()
 {
+    // Check if this is a functon call
     if (currentToken()->type == LEFT_PAREN){
         string functionName = previousToken()->value;
-        vector<unique_ptr<ASTNode>> functionArgs;
+        vector<unique_ptr<Expression>> functionArgs;
         getToken();
-        while (true){
-            bool afterComma = false;
-            auto expr = expression();
-            if (expr == nullptr && afterComma){
-                throw runtime_error("expected primary-expression");
-            }
-            if (expr != nullptr){
-                functionArgs.push_back(expr);
-            }
-            if (matchToken({RIGHT_PAREN})){
-                break;
-            }
-            else if (matchToken({COMMA})){
-                afterComma = true;
-            } else {
-                throw runtime_error("expected ')' ");
+        if (!matchToken({RIGHT_PAREN})){
+            while (true){
+                auto expr = expression();
+                if (expr == nullptr){
+                    throw runtime_error("expected primary-expression");
+                }
+                functionArgs.push_back(move(expr));
+                if (matchToken({RIGHT_PAREN})){
+                    break;
+                }
+                else if (matchToken({COMMA})){
+                    continue;
+                } else {
+                    throw runtime_error("expected ')' ");
+                }
             }
         }
-        auto callFunc = make_unique<CallFunctionASTNode>(functionName, functionArgs);
+        auto callFunc = make_unique<CallFunction>(move(functionName), move(functionArgs));
         return callFunc;
-    } else {
-        return make_unique<IdentifierASTNode>(previousToken()->value);
     }
+    else if (currentToken()->type == LEFT_SQUARE){ // Access an element of array
+        string identifierName = previousToken()->value;
+        auto identifier = make_unique<Identifier>(identifierName);
+        getToken();
+        if (currentToken()->type != NUMBER_INT){
+            throw runtime_error("index must be an int number");
+        }
+        int index = stoi(getToken()->value);
+        if (index < 0) throw runtime_error("index must be positive");
+        consumeToken(RIGHT_SQUARE, "expect a ']'");
+        return make_unique<ArrayAccess>(move(identifier), index);
+    } 
+    else { 
+        return make_unique<Identifier>(previousToken()->value); // Just a variable
+    }
+}
+
+vector<unique_ptr<ASTNode>> Parser::getASTNodeList()
+{
+    return move(ASTNodeList);
 }
 
 void Parser::parse()
 {
-
+    cout << "Size: " << tokenList.size() << endl;
+    while (currentToken()->type != EOF_TOKEN){
+        unique_ptr<ASTNode> node;
+        if (matchToken({FUNCTION})){
+            node = function();
+        }
+        else {
+            node = statement();
+        }
+        ASTNodeList.push_back(move(node));
+    }
 }
+
+

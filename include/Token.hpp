@@ -8,7 +8,7 @@ enum TokenType {
     LEFT_PAREN,
     RIGHT_PAREN,
     LEFT_SQUARE,
-    RIGHT_SQAURE,
+    RIGHT_SQUARE,
     LEFT_BRACE,
     RIGHT_BRACE,
     COMMA,
@@ -69,6 +69,7 @@ enum TokenType {
     RETURN,
     FOR,
     WHILE,
+    BREAK,
     FUNCTION,
     PRINT,
 

@@ -20,15 +20,23 @@ primary         → NUMBER | STRING | "true" | "false" | IDENTIFIER
 
 Statements
 
-program        → statement* EOF ;
+program         → statement* EOF ;
 
-statement      → varDeclaration
-               | print
-               | block
-               | condition
-               | forLoop
-               | whileLoop ;
+statement       → expression
+                | varDecl
+                | printStmt
+                | block
+                | condition
+                | forLoop
+                | whileLoop ;
 
-varDecl        → TYPE IDENTIFIER ( "=" expression )? ";" ;
-block          → "{" declaration* "}" ;
-printStmt      → "print" "(" expression ")" ";"; 
+varDecl         → TYPE IDENTIFIER ( "=" expression )? ";" ;
+ArrayDecl       → 'array' TYPE IDENTIFIER '[' Size ']' ('=' Initializer)? ';'
+block           → "{" declaration* "}" ;
+printStmt       → "print" "(" expression ")" ";"; 
+condition       → if "(" expression ")" statement 
+                 ( "else" statement )? ;
+whileStmt       → "while" "(" expression ")" statement ;
+forStmt         → "for" "(" ( varDecl | exprStmt | ";" )
+                 expression? ";"
+                 expression? ")" statement ;

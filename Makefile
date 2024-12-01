@@ -2,7 +2,7 @@ CC=g++
 CFLAGS=-Wall -Wextra -Werror -O3
 
 clean:
-	rm Dynamite.exe
+	rm main.exe
 
 main:
-	$(CC) main.cpp Lexer.cpp -o main
+	$(CC) main.cpp Parser.cpp Lexer.cpp ASTVisitor.cpp VisitorPrintNode.cpp AST.cpp -o main
