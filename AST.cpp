@@ -40,6 +40,59 @@ Value *DoubleLiteral::codeGeneration() {
         return ConstantFP::get(*TheContext, APFloat(value));
 }
 
+Value* ArrayAccess::codeGeneration() {
+    Value *arrayPtr = identifier->codeGeneration();
+    if (!arrayPtr) {
+        return nullptr;
+    }
+
+    if (NamedValues[identifier->value]) {
+        logError("No such array");
+        return nullptr;
+    }
+
+    // Я без понятия как это писать
+}
+
+Value* ArrayDeclaration::codeGeneration() {
+    Type* llvmType = nullptr;
+    switch (type) {
+        case TokenType::INT:   llvmType = Type::getInt32Ty(*TheContext); break;
+        case TokenType::FLOAT: llvmType = Type::getFloatTy(*TheContext); break;
+        case TokenType::CHAR:  llvmType = Type::getInt8Ty(*TheContext); break;
+        case TokenType::STR:   llvmType = Type::getInt8PtrTy(*TheContext); break;
+        case TokenType::BOOL:  llvmType = Type::getInt1Ty(*TheContext); break;
+    }
+
+    if (!llvmType) {
+        logError("Unsupported type");
+        return nullptr;
+    }
+
+    ArrayType *arrayType = llvm::ArrayType::get(llvmType, size);
+    AllocaInst *arrayAlloc = Builder->CreateAlloca(arrayType, nullptr, identifier->value);
+
+    for (int i = 0; i < size; ++i) {
+        if (i < initValues.size()) {
+            llvm::Value *initValue = initValues[i]->codeGeneration();
+            if (!initValue) {
+                return nullptr;
+            }
+
+            Value *index = ConstantInt::get(Type::getInt32Ty(*TheContext), i);
+            Value *elementPtr = Builder->CreateGEP(arrayType, arrayAlloc, index, "array_element_ptr");
+            Builder->CreateStore(initValue, elementPtr);
+        } else {
+            Value *defaultValue = ConstantInt::get(llvmType, 0);
+            Value *index = ConstantInt::get(Type::getInt32Ty(*TheContext), i);
+            Value *elementPtr = Builder->CreateGEP(arrayType, arrayAlloc, index, "array_element_ptr");
+            Builder->CreateStore(defaultValue, elementPtr);
+        }
+    }
+
+    return arrayAlloc;
+}
+
 Value *VariableReferencing::codeGeneration() {
   Value *V = NamedValues[varName];
   if (!V)
@@ -159,12 +212,10 @@ Value *Binary::codeGeneration() {
 
 
 Value* StringLiteral::codeGeneration() {
-    LLVMContext& Context = Module->getContext();
-
-    Constant* stringConstant = ConstantDataArray::getString(Context, value, true);
+    Constant* stringConstant = ConstantDataArray::getString(*TheContext, value, true);
 
     GlobalVariable* globalString = new GlobalVariable(
-            &Module,
+            &TheModule,
             stringConstant->getType(),
             true,
             GlobalValue::PrivateLinkage,
@@ -213,15 +264,13 @@ Value *UnaryExprAST::codeGeneration() {
 }
 
 Value* VariableDeclaration::codeGeneration() {
-    LLVMContext& Context = Module->getContext();
-
     Type* llvmType = nullptr;
     switch (type) {
-        case TokenType::INT:   llvmType = Builder->getInt32Ty(); break;
-        case TokenType::FLOAT: llvmType = Builder->getFloatTy(Context); break;
-        case TokenType::CHAR:  llvmType = Builder->getInt8Ty(); break;
-        case TokenType::STR:   llvmType = Builder->getInt8PtrTy(); break;
-        case TokenType::BOOL:  llvmType = Builder->getInt1Ty(); break;
+        case TokenType::INT:   llvmType = Builder->getInt32Ty(*TheContext); break;
+        case TokenType::FLOAT: llvmType = Builder->getFloatTy(*TheContext); break;
+        case TokenType::CHAR:  llvmType = Builder->getInt8Ty(*TheContext); break;
+        case TokenType::STR:   llvmType = Builder->getInt8PtrTy(*TheContext); break;
+        case TokenType::BOOL:  llvmType = Builder->getInt1Ty(*TheContext); break;
     }
 
     if (!llvmType) {
@@ -229,7 +278,7 @@ Value* VariableDeclaration::codeGeneration() {
         return nullptr;
     }
 
-    AllocaInst* allocaInst = Builder->CreateAlloca(llvmType, nullptr, varName);
+    AllocaInst* allocaInst = Builder->CreateAlloca(llvmType, nullptr, identifier->value);
 
     if (initValue) {
         Value* initVal = initValue->codeGeneration();
@@ -250,11 +299,11 @@ Value* VariableDeclaration::codeGeneration() {
         Builder->CreateStore(initVal, allocaInst);
     }
 
-    NamedValues[varName] = allocaInst;
+    NamedValues[identifier->value] = allocaInst;
     return allocaInst;
 }
 
-Value* Assigment::codeGeneration() {
+/*Value* Assignment::codeGeneration() {
     Value* varPtr = NamedValues[varName];
     if (!varPtr) {
         throw std::runtime_error("Undefined variable: " + varName);
@@ -277,17 +326,12 @@ Value* Assigment::codeGeneration() {
 
     Builder.CreateStore(exprValue, varPtr);
     return exprValue;
-}
+}*/
 
 void *Print::codeGeneration() {
-    /*Function *CalleeF = TheModule->getOrInsertFunction("printf",
-                                                       FunctionType::get(IntegerType::getInt32Ty(Context), PointerType::get(Type::getInt8Ty(Context), 0), true));
-    Builder.CreateCall(CalleeF, expr, "printfCall");*/
-
-    LLVMContext& Context = Module->getContext();
     Value* value = expr->codeGeneration();
     Type* valueType = value->getType();
-    Function* printfFunc = Module->getFunction("printf");
+    Function* printfFunc = TheModule->getFunction("printf");
     if (!printfFunc) {
         FunctionType* printfType = FunctionType::get(
                 Builder.getInt32Ty(),
@@ -295,7 +339,7 @@ void *Print::codeGeneration() {
                 true
         );
         printfFunc = Function::Create(
-                printfType, Function::ExternalLinkage, "printf", &Module);
+                printfType, Function::ExternalLinkage, "printf", &TheModule);
     }
 
     Value* formatStr = nullptr;
@@ -371,71 +415,48 @@ Value *Condition::codeGeneration() {
   return PN;
 }
 
-Value *ForLoop::codeGeneration() {
-  Function *currFunc = Builder->GetInsertBlock()->getParent();
-  AllocaInst *allocated = CreateEntryBlockAlloca(currFunc, variableName);
+Value* ForLoop::codeGeneration() {
+    Function *function = Builder->GetInsertBlock()->getParent();
+    BasicBlock *loopHeader = BasicBlock::Create(*TheContext, "loopHeader", function);
+    BasicBlock *loopBody = BasicBlock::Create(*TheContext, "loopBody", function);
+    BasicBlock *loopEnd = BasicBlock::Create(*TheContext, "loopEnd", function);
 
-  Value *startValue = start->codeGeneration();
-  if (!startValue)
+    if (initializer) {
+        initializer->codeGeneration();
+    }
+
+    Builder->CreateBr(loopHeader);
+    Builder->SetInsertPoint(loopHeader);
+
+    Value *condValue = condition->codeGeneration();
+    if (!condValue) {
+        logError("Unsupported condition");
+        return nullptr;
+    }
+
+    Builder->CreateCondBr(condValue, loopBody, loopEnd);
+
+    Builder->SetInsertPoint(loopBody);
+    if (body) {
+        body->codeGeneration();
+    }
+
+    if (update) {
+        update->codeGeneration();
+    }
+
+    Builder->CreateBr(loopHeader);
+    Builder->SetInsertPoint(loopEnd);
+
     return nullptr;
-
-  Builder->CreateStore(startValue, allocated);
-
-  BasicBlock *loopBlock = BasicBlock::Create(*TheContext, "loop", currFunction);
-
-  Builder->CreateBr(loopBlock);
-
-  Builder->SetInsertPoint(loopBlock);
-
-  AllocaInst *oldValue = NamedValues[variableName];
-  NamedValues[variableName] = allocated;
-
-  if (!body->codeGeneration())
-    return nullptr;
-
-  Value *stepValue = nullptr;
-  if (step) {
-    stepValue = step->codeGeneration();
-    if (!stepVal)
-      return nullptr;
-  } else {
-    StepVal = ConstantFP::get(*TheContext, APFloat(1.0));
-  }
-
-  Value *endCondition = end->codeGeneration();
-  if (!endCondition)
-    return nullptr;
-
-  Value *currVar = Builder->CreateLoad(Type::getDoubleTy(*TheContext), allocated,
-                                      variableName.c_str());
-  Value *nextVar = Builder->CreateFAdd(currVar, stepValue, "nextvar");
-  Builder->CreateStore(nextVar, allocated);
-
-  endCondition = Builder->CreateFCmpONE(
-      endCondition, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond");
-
-  BasicBlock *afterBlock =
-      BasicBlock::Create(*TheContext, "afterloop", currFunction);
-
-  Builder->CreateCondBr(endCondition, loopBlock, afterBlock);
-
-  Builder->SetInsertPoint(afterBlock);
-
-  if (oldValue)
-    NamedValues[variableName] = oldValue;
-  else
-    NamedValues.erase(variableName);
-
-  return Constant::getNullValue(Type::getDoubleTy(*TheContext));
 }
 
 Value *WhileLoop::codeGeneration() {
-    LLVMContext& Context = Module->getContext();
     Function* parentFunction = Builder->GetInsertBlock()->getParent();
 
-    BasicBlock* condBlock = BasicBlock::Create(Context, "while.cond", parentFunction);
-    BasicBlock* bodyBlock = BasicBlock::Create(Context, "while.body", parentFunction);
-    BasicBlock* endBlock = BasicBlock::Create(Context, "while.end", parentFunction);
+    BasicBlock* condBlock = BasicBlock::Create(*TheContext, "while.cond", parentFunction);
+    BasicBlock* bodyBlock = BasicBlock::Create(*TheContext, "while.body", parentFunction);
+    BasicBlock* endBlock = BasicBlock::Create(*TheContext, "while.end", parentFunction);
 
     Builder.CreateBr(condBlock);
     Builder.SetInsertPoint(condBlock);
@@ -526,7 +547,6 @@ Function *FunctionAST::codeGeneration() {
   NamedValues.clear();
   for (auto &Arg : currFunction->args()) {
     allocaInstance *allocated = CreateEntryBlockAlloca(currFunction, Arg.getName());
-
     Builder->CreateStore(&Arg, allocated);
 
     NamedValues[std::string(Arg.getName())] = allocated;
@@ -561,4 +581,26 @@ Value *CallFunction::codeGeneration() {
     }
 
     return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+}
+
+// в туториале у чела BasicBlock хранится, у нас такого нет, я хз че делать тоже
+Value* Return::codeGeneration() {
+    Value *returnValue = expr->codeGeneration();
+    if (!returnValue) {
+        return nullptr;
+    }
+
+    Function *currentFunction = Builder->GetInsertBlock()->getParent();
+    if (!currentFunction) {
+        return nullptr;
+    }
+
+    Type *returnType = currentFunction->getReturnType();
+    if (returnType != returnValue->getType()) {
+        returnValue = Builder->CreateBitCast(returnValue, returnType, "casted_return_value");
+    }
+
+    Builder->CreateRet(returnValue);
+
+    return nullptr;
 }
