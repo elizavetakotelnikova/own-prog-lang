@@ -360,6 +360,10 @@ public:
         proto(std::move(proto)), body(std::move(body)){}
 
     void accept(Visitor& visitor) override;
+    std::string getName() {
+        return proto->name;
+    }
+
     std::string toString() override {
         std::stringstream s;
         s << "Function";
