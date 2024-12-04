@@ -29,7 +29,7 @@ namespace orc {
 
 class OwnProgLangASTMaterializationUnit : public MaterializationUnit {
 public:
-    OwnProgLangASTMaterializationUnit::OwnProgLangASTMaterializationUnit(OwnProgLangASTLayer &L, std::unique_ptr<FunctionAST> F): MaterializationUnit(L.getInterface(*F)), L(L), F(std::move(F)) {}
+    OwnProgLangASTMaterializationUnit::OwnProgLangASTMaterializationUnit(OwnProgLangASTLayer &L, std::unique_ptr<unction> F): MaterializationUnit(L.getInterface(*F)), L(L), F(std::move(F)) {}
 
 	StringRef getName() const override {
 		return "OwnProgLangASTMaterializationUnit";
@@ -39,7 +39,7 @@ public:
 
 private:
     OwnProgLangASTLayer &L;
-	std::unique_ptr<FunctionAST> F;
+	std::unique_ptr<unction> F;
 
 	void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override {
 		llvm_unreachable("OwnProgLang functions are not overridable");
@@ -50,11 +50,11 @@ class OwnProgLangASTLayer {
 public:
 	OwnProgLangASTLayer(IRLayer &BaseLayer, const DataLayout &DL): BaseLayer(BaseLayer), DL(DL) {}
 
-	Error add(ResourceTrackerSP RT, std::unique_ptr<FunctionAST> F);
+	Error add(ResourceTrackerSP RT, std::unique_ptr<unction> F);
 
-	void emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<FunctionAST> F);
+	void emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<unction> F);
 
-	MaterializationUnit::Interface getInterface(FunctionAST &F);
+	MaterializationUnit::Interface getInterface(unction &F);
 
 private:
 	IRLayer &BaseLayer;
@@ -93,7 +93,7 @@ public:
     }
     static Expected<std::unique_ptr<OwnProgLangJIT>> Create();
     Error addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nullptr);
-    Error addAST(std::unique_ptr<FunctionAST> F, ResourceTrackerSP RT = nullptr);
+    Error addAST(std::unique_ptr<Function> F, ResourceTrackerSP RT = nullptr);
     llvm::Expected<llvm::JITEvaluatedSymbol> lookup(llvm::StringRef Name);
     const llvm::DataLayout &getDataLayout() const { return DL; }
   	JITDylib &getMainJITDylib() { return MainJD; }

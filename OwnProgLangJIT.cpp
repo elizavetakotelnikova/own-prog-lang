@@ -5,7 +5,7 @@ llvm::LLVMContext TheContext;
 std::unique_ptr<llvm::Module> TheModule;
 std::unique_ptr<llvm::IRBuilder<>> Builder;
 
-llvm::orc::ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST, const std::string &Suffix) {
+llvm::orc::ThreadSafeModule irgenAndTakeOwnership(Function &FnAST, const std::string &Suffix) {
     FnAST.codeGeneration();
     return llvm::orc::ThreadSafeModule(std::move(TheModule), std::make_unique<llvm::LLVMContext>());
 }
@@ -45,7 +45,7 @@ Error OwnProgLangJIT::addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nul
     return TransformLayer.add(RT, std::move(TSM));
 }
 
-Error OwnProgLangJIT::addAST(std::unique_ptr<FunctionAST> F, ResourceTrackerSP RT = nullptr) {
+Error OwnProgLangJIT::addAST(std::unique_ptr<Function> F, ResourceTrackerSP RT = nullptr) {
     if (!RT)
         RT = MainJD.getDefaultResourceTracker();
     return ASTLayer.add(RT, std::move(F));
@@ -79,19 +79,19 @@ void OwnProgLangASTMaterializationUnit::materialize(std::unique_ptr<Materializat
     L.emit(std::move(R), std::move(F));
 }
 
-void OwnProgLangASTLayer::emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<FunctionAST> F) {
+void OwnProgLangASTLayer::emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<Function> F) {
     BaseLayer.emit(std::move(MR), irgenAndTakeOwnership(*F, ""));
 }
 
-MaterializationUnit::Interface OwnProgLangASTLayer::getInterface(FunctionAST &F) {
+MaterializationUnit::Interface OwnProgLangASTLayer::getInterface(Function &F) {
     MangleAndInterner Mangle(BaseLayer.getExecutionSession(), DL);
     SymbolFlagsMap Symbols;
-    // have to change later, might not work :_), cause proto is private ig
-    Symbols[Mangle(F.proto.getName())] = JITSymbolFlags(JITSymbolFlags::Exported | JITSymbolFlags::Callable);
+
+    Symbols[Mangle(F.getName())] = JITSymbolFlags(JITSymbolFlags::Exported | JITSymbolFlags::Callable);
     return MaterializationUnit::Interface(std::move(Symbols), nullptr);
 }
 
-Error OwnProgLangASTLayer::add(ResourceTrackerSP RT, std::unique_ptr<FunctionAST> F) {
+Error OwnProgLangASTLayer::add(ResourceTrackerSP RT, std::unique_ptr<Function> F) {
     return RT->getJITDylib().define(std::make_unique<OwnProgLangASTMaterializationUnit>(*this, std::move(F)), RT);
 }
 

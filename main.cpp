@@ -4,6 +4,7 @@
 #include "include/VisitorPrintNode.h"
 #include "include/Lexer.h"
 #include "include/Parser.h"
+#include "OwnProgLangJIT.h"
 
 int main(int argc, char *argv[]){
     std::ifstream inputFile(argv[1]);
@@ -14,6 +15,12 @@ int main(int argc, char *argv[]){
     std::stringstream ss;
 	ss << inputFile.rdbuf();
 	std::string sourceCode = ss.str();
+
+	auto JIT = llvm::orc::OwnProgLangJIT::Create();
+	if (!JIT) {
+		llvm::errs() << "Failed to create JIT: " << llvm::toString(JIT.takeError()) << "\n";
+		return 1;
+	}
 
 	Lexer lexer(sourceCode);
 	lexer.scanSourceCode();
@@ -32,6 +39,14 @@ int main(int argc, char *argv[]){
 		std::cout << "Node No." << i << " : " << std::endl;
 		if (!node->isChecked){
 			node->accept(visitor);
+
+			auto *FuncNode = dynamic_cast<Function *>(node.get());
+			if (FuncNode) {
+				if (auto Err = JIT->addAST(std::make_unique<FunctionAST>(FuncNode))) {
+					llvm::errs() << "Error adding AST to JIT: " << llvm::toString(std::move(Err)) << "\n";
+					return 1;
+				}
+			}
 		}
 		i++;
 	}
