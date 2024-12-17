@@ -2,18 +2,23 @@
 
 #include "Token.hpp"
 #include <vector>
-#include <memory>
 #include <sstream>
+#include <memory>
+#include <llvm/IR/Value.h>
+#include <llvm/IR/Type.h>
+#include <llvm/IR/DerivedTypes.h>
 
 class Visitor;
+class CodeGenContext;
 
 class ASTNode {
 public:
     virtual ~ASTNode() = default;
     virtual void accept(Visitor& visitor) = 0;
-    virtual Value *codeGeneration() = 0;
     virtual std::string toString() { return "ASTNode"; } 
     bool isChecked = false;
+
+    virtual llvm::Value* codeGeneration(CodeGenContext& context) = 0;
 };
 
 class Expression : public ASTNode {
@@ -30,6 +35,7 @@ public:
     void accept(Visitor& visitor) override;
 };
 
+// --------------------------Expression--------------------------
 
 class IntegerLiteral : public Expression {
 public:
@@ -43,7 +49,7 @@ public:
         s << "Integer: " << value;
         return s.str();
     }
-
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class FloatLiteral : public Expression {
@@ -58,6 +64,7 @@ public:
         s << "Float: " << value;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class StringLiteral : public Expression {
@@ -72,6 +79,7 @@ public:
         s << "String: " << value;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class BoolLiteral : public Expression {
@@ -86,6 +94,7 @@ public:
         s << "Bool: " << value;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class CharLiteral : public Expression {
@@ -100,6 +109,7 @@ public:
         s << "Char: " << value;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class Identifier : public Expression {
@@ -113,6 +123,7 @@ public:
         s << "Identifier: " << value;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class Unary : public Expression {
@@ -128,6 +139,7 @@ public:
         s << "Unary operator: " << _operator.value;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class Binary : public Expression {
@@ -136,13 +148,14 @@ public:
     std::unique_ptr<Expression> leftOperand, rightOperand;
 
     Binary(Token _operator, std::unique_ptr<Expression> leftOperand, std::unique_ptr<Expression> rightOperand) :
-        _operator(_operator), leftOperand(std::move(leftOperand)), rightOperand(move(rightOperand)){};
+        _operator(_operator), leftOperand(std::move(leftOperand)), rightOperand(std::move(rightOperand)){};
     void accept(Visitor& visitor) override;
     std::string toString() override {
         std::stringstream s;
         s << "Binary Operator: " << _operator.value;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class CallFunction : public Expression {
@@ -151,13 +164,14 @@ public:
     std::vector<std::unique_ptr<Expression>> functionArgs;
 
     CallFunction(const std::string& functionName, std::vector<std::unique_ptr<Expression>> functionArgs) :
-        functionName(functionName), functionArgs(move(functionArgs)){};
+        functionName(functionName), functionArgs(std::move(functionArgs)){};
     void accept(Visitor& visitor) override;
     std::string toString() override {
         std::stringstream s;
         s << "Call Function with name: " << functionName;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class ArrayAccess : public Expression {
@@ -174,30 +188,24 @@ public:
         s << "Array Access";
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class Assignment : public Expression {
 public:
     std::unique_ptr<Expression> identifier;
-    std::unique_ptr<Expression> initValue;
+    std::unique_ptr<Expression> value;
 
-    Assignment(std::unique_ptr<Expression> identifier, std::unique_ptr<Expression> initValue) :
-        identifier(std::move(identifier)), initValue(std::move(initValue)){}
+    Assignment(std::unique_ptr<Expression> identifier, std::unique_ptr<Expression> value) :
+        identifier(std::move(identifier)), value(std::move(value)){}
     void accept(Visitor& visitor) override;
     std::string toString() override {
         std::stringstream s;
         s << "Assignment";
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
-
-// Do we really need this ?
-// class VariableReferencingASTNode : public ASTNode {
-//   std::string Name;
-// public:
-//   VariableExprAST(const std::string &Name) : Name(Name) {}
-// };
-
 
 // --------------------------Statement-------------------------
 
@@ -213,6 +221,7 @@ public:
         s << "Expression Statement";
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class ArrayDeclaration : public Statement {
@@ -236,6 +245,7 @@ public:
         s << "Array Declaration with type " << type;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class VariableDeclaration : public Statement {
@@ -252,6 +262,7 @@ public:
         s << "Variable Declaration with type " << type;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class Print : public Statement {
@@ -265,6 +276,7 @@ public:
         s << "Print";
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class Block : public Statement {
@@ -279,6 +291,7 @@ public:
         s << "Block";
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class Condition : public Statement {
@@ -294,8 +307,8 @@ public:
         s << "Condition";
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
-
 
 class ForLoop : public Statement {
 public:
@@ -316,6 +329,7 @@ public:
         s << "For Loop";
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class WhileLoop : public Statement {
@@ -331,6 +345,7 @@ public:
         s << "While Loop";
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class PrototypeFunction : public Statement {
@@ -348,8 +363,8 @@ public:
         s << "Prototype Function with type " << returnType;
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
-
 
 class Function : public Statement {
 public:
@@ -360,17 +375,12 @@ public:
         proto(std::move(proto)), body(std::move(body)){}
 
     void accept(Visitor& visitor) override;
-    std::string getName() {
-        return proto->name;
-    }
-
     std::string toString() override {
         std::stringstream s;
         s << "Function";
         return s.str();
     }
-
-    Function *codeGeneration();
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
 class Return : public Statement {
@@ -384,4 +394,5 @@ public:
         s << "Return";
         return s.str();
     }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
 };

@@ -4,6 +4,7 @@
 #include "include/VisitorPrintNode.h"
 #include "include/Lexer.h"
 #include "include/Parser.h"
+#include "include/CodeGenContext.h"
 #include "OwnProgLangJIT.h"
 
 int main(int argc, char *argv[]){
@@ -50,5 +51,8 @@ int main(int argc, char *argv[]){
 		}
 		i++;
 	}
+	CodeGenContext context;
+	context.generateCode(std::move(nodeList));
+	context.runCode();
 	return 0;
 }

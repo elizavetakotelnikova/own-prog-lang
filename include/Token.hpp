@@ -20,7 +20,7 @@ enum TokenType {
     PLUS,
     MINUS,
     MULTIPLY,
-    DIVIVE,
+    DIVIDE,
     MODULO,
 
     // Logical operators

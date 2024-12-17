@@ -88,7 +88,7 @@ void VisitorPrintNode::visitAssignment(Assignment &node)
     node.isChecked = true;
     out << "Create " << node.toString() << endl;
     node.identifier->accept(*this);
-    node.initValue->accept(*this);
+    node.value->accept(*this);
 }
 
 void VisitorPrintNode::visitExpressionStatement(ExpressionStatement &node)

@@ -364,7 +364,7 @@ unique_ptr<Expression> Parser::term(){
 
 unique_ptr<Expression> Parser::factor(){
     auto expr = unary();
-    while (matchToken({MULTIPLY, DIVIVE, MODULO})){
+    while (matchToken({MULTIPLY, DIVIDE, MODULO})){
         Token _operator = *previousToken();
         auto right = unary();
         expr = make_unique<Binary>(_operator, move(expr), move(right));

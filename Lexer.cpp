@@ -196,7 +196,7 @@ void Lexer::scanToken()
         tokenList.push_back(Token(MULTIPLY, "*"));
         break;
     case '/':
-        tokenList.push_back(Token(DIVIVE, "/"));
+        tokenList.push_back(Token(DIVIDE, "/"));
         break;
     case '%':
         tokenList.push_back(Token(MODULO, "%"));

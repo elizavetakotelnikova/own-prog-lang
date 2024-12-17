@@ -1,622 +1,630 @@
-#pragma once
-
 #include "include/AST.h"
-#include "include/Token.hpp"
-
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/IRBuilder.h"
+#include "include/CodeGenContext.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/Value.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/Argument.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/GlobalVariable.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/TargetSelect.h"
-#include "llvm/Support/ToolOutputFile.h"
 
-#include <vector>
-#include <memory>
-
-static std::unique_ptr<llvm::LLVMContext> TheContext;
-static std::unique_ptr<llvm::Module> TheModule;
-static std::unique_ptr<llvm::IRBuilder<>> Builder;
-static std::map<std::string, llvm::Value*> NamedValues;
-static std::map<std::string, std::unique_ptr<PrototypeFunction>> FunctionProtos;
-static ExitOnError ExitOnErr;
-
-llvm::Value *logError(const char *Str) {
-  logError(Str);
-  return nullptr;
+llvm::Value *IntegerLiteral::codeGeneration(CodeGenContext &context)
+{
+    return llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.llvmContext), value);
 }
 
-Function *getFunction(std::string Name) {
-  if (auto *F = TheModule->getFunction(Name))
-    return F;
-
-  auto FI = FunctionProtos.find(Name);
-  if (FI != FunctionProtos.end())
-    return FI->second->codeGeneration();
-
-  return nullptr;
+llvm::Value *FloatLiteral::codeGeneration(CodeGenContext &context)
+{
+    return llvm::ConstantFP::get(llvm::Type::getFloatTy(context.llvmContext), value);
 }
 
-llvm::Value *IntegerLiteral::codeGeneration() {
-        return llvm::ConstantInt::get(*TheContext, llvm::APInt(value));
+llvm::Value *StringLiteral::codeGeneration(CodeGenContext &context)
+{
+    llvm::Constant *stringConstant = llvm::ConstantDataArray::getString(context.llvmContext, value, true);
+
+    llvm::GlobalVariable *globalString = new llvm::GlobalVariable(
+        *context.module,
+        stringConstant->getType(),
+        true,
+        llvm::GlobalValue::PrivateLinkage,
+        stringConstant,
+        ".str");
+
+    llvm::Value *stringPtr = context.builder.CreateInBoundsGEP(
+        globalString->getValueType(),
+        globalString,
+        {context.builder.getInt32(0), context.builder.getInt32(0)},
+        "str_ptr");
+    return stringPtr;
 }
 
-llvm::Value *FloatLiteral::codeGeneration() {
-        return llvm::ConstantFP::get(*TheContext, llvm::APFloat(value));
+llvm::Value *BoolLiteral::codeGeneration(CodeGenContext &context)
+{
+    return llvm::ConstantInt::get(llvm::Type::getInt1Ty(context.llvmContext), value);
 }
 
-llvm::Value *DoubleLiteral::codeGeneration() {
-        return llvm::ConstantFP::get(*TheContext, llvm::APFloat(value));
+llvm::Value *CharLiteral::codeGeneration(CodeGenContext &context)
+{
+    return llvm::ConstantInt::get(llvm::Type::getInt8Ty(context.llvmContext), static_cast<uint8_t>(value));
 }
 
-llvm::Value* ArrayAccess::codeGeneration() {
-    llvm::Value *arrayPtr = identifier->codeGeneration();
-    if (!arrayPtr) {
+llvm::Value *Identifier::codeGeneration(CodeGenContext &context)
+{
+    auto locals = context.locals();
+    if (locals.find(value) == locals.end())
+    {
+        std::cerr << "Undefined identifier: " << value << std::endl;
         return nullptr;
     }
 
-    if (NamedValues[identifier->value]) {
-        logError("No such array");
-        return nullptr;
-    }
-
-    // Я без понятия как это писать
+    return new llvm::LoadInst(locals[value]->getType(), locals[value], value, false, context.currentBlock().get());
 }
 
-llvm::Value* ArrayDeclaration::codeGeneration() {
-    llvm::Type* llvmType = nullptr;
-    switch (type) {
-        case TokenType::INT:   llvmType = llvm::Type::getInt32Ty(*TheContext); break;
-        case TokenType::FLOAT: llvmType = llvm::Type::getFloatTy(*TheContext); break;
-        case TokenType::CHAR:  llvmType = llvm::Type::getInt8Ty(*TheContext); break;
-        case TokenType::STR:   llvmType = llvm::Type::getInt8PtrTy(*TheContext); break;
-        case TokenType::BOOL:  llvmType = llvm::Type::getInt1Ty(*TheContext); break;
-    }
+llvm::Value *Unary::codeGeneration(CodeGenContext &context)
+{
+    llvm::Value *operandValue = operand->codeGeneration(context);
+    if (operandValue == nullptr)
+        return nullptr;
 
-    if (!llvmType) {
-        logError("Unsupported type");
+    llvm::Instruction::BinaryOps instr;
+    switch (_operator.type)
+    {
+    case MINUS:
+        return context.builder.CreateNeg(operandValue, "neg");
+    case NOT:
+        if (!operandValue->getType()->isIntegerTy())
+        {
+            std::cerr << "Operand of NOT must be an integer type" << std::endl;
+            return nullptr;
+        }
+        return context.builder.CreateNot(operandValue, "not");
+    default:
+        std::cerr << "Unknown unary operator" << std::endl;
+        return nullptr;
+    }
+}
+
+llvm::Value *Binary::codeGeneration(CodeGenContext &context)
+{
+    llvm::Value *leftValue = leftOperand->codeGeneration(context);
+    llvm::Value *rightValue = rightOperand->codeGeneration(context);
+    if ((leftValue == nullptr) || (rightValue == nullptr))
+    {
         return nullptr;
     }
 
-    llvm::ArrayType *arrayType = llvm::ArrayType::get(llvmType, size);
-    llvm::AllocaInst *arrayAlloc = Builder->CreateAlloca(arrayType, nullptr, identifier->value);
+    if (rightValue->getType() != leftValue->getType())
+    {
+        // since we only support double and int, always cast to double in case of different types.
+        auto doubleTy = llvm::Type::getDoubleTy(context.llvmContext);
+        rightValue = context.builder.CreateCast(llvm::Instruction::CastOps::SIToFP, rightValue, doubleTy, "castdb");
+        leftValue = context.builder.CreateCast(llvm::Instruction::CastOps::SIToFP, leftValue, doubleTy, "castdb");
+    }
 
-    for (int i = 0; i < size; ++i) {
-        if (i < initValues.size()) {
-            llvm::Value *initValue = initValues[i]->codeGeneration();
-            if (!initValue) {
-                return nullptr;
-            }
+    bool isDoubleTy = rightValue->getType()->isFloatingPointTy();
+    if (isDoubleTy && (_operator.type == LOGICAL_AND || _operator.type == LOGICAL_OR))
+    {
+        std::cerr << "Binary operation (AND, OR) on floating point value is not supported" << std::endl;
+        return nullptr;
+    }
 
-            llvm::Value *index = llvm::ConstantInt::get(Type::getInt32Ty(*TheContext), i);
-            llvm::Value *elementPtr = Builder->CreateGEP(arrayType, arrayAlloc, index, "array_element_ptr");
-            Builder->CreateStore(initValue, elementPtr);
-        } else {
-            llvm::Value *defaultValue = llvm::ConstantInt::get(llvmType, 0);
-            llvm::Value *index = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*TheContext), i);
-            llvm::Value *elementPtr = Builder->CreateGEP(arrayType, arrayAlloc, index, "array_element_ptr");
-            Builder->CreateStore(defaultValue, elementPtr);
+    llvm::Instruction::BinaryOps instr;
+    switch (_operator.type)
+    {
+    case PLUS:
+        isDoubleTy ? instr = llvm::Instruction::FAdd : instr = llvm::Instruction::Add;
+        break;
+    case MINUS:
+        isDoubleTy ? instr = llvm::Instruction::FSub : instr = llvm::Instruction::Sub;
+        break;
+    case MULTIPLY:
+        isDoubleTy ? instr = llvm::Instruction::FMul : instr = llvm::Instruction::Mul;
+        break;
+    case DIVIDE:
+        isDoubleTy ? instr = llvm::Instruction::FDiv : instr = llvm::Instruction::SDiv;
+        break;
+    case LOGICAL_AND:
+        instr = llvm::Instruction::And;
+        break;
+    case LOGICAL_OR:
+        instr = llvm::Instruction::Or;
+        break;
+    default:
+        std::cerr << "Unknown binary operator" << std::endl;
+        return nullptr;
+    }
+    return context.builder.CreateBinOp(instr, leftValue, rightValue, "mathtmp");
+}
+
+llvm::Value *CallFunction::codeGeneration(CodeGenContext &context)
+{
+    llvm::Function *CalleeF = context.module->getFunction(functionName);
+    if (!CalleeF)
+        std::cerr << "Unknown function referenced" << std::endl;
+        return nullptr;
+
+    if (CalleeF->arg_size() != functionArgs.size())
+        std::cerr << "Missing arguments" << std::endl;
+        return nullptr;
+
+    std::vector<llvm::Value *> ArgsV;
+    for (auto &arg : functionArgs)
+    {
+        ArgsV.push_back(arg->codeGeneration(context));
+        if (!ArgsV.back())
+            return nullptr;
+    }
+
+    return context.builder.CreateCall(CalleeF, ArgsV, "calltmp");
+}
+
+llvm::Value *ArrayAccess::codeGeneration(CodeGenContext &context)
+{
+    llvm::Value *arrayPtr = context.locals()[identifier->value];
+    if (!arrayPtr)
+    {
+        std::cerr << "Array " << identifier->value << " not declared." << std::endl;
+        return nullptr;
+    }
+
+    llvm::Type *arrayType = arrayPtr->getType();
+    if (!arrayType->isArrayTy())
+    {
+        std::cerr << identifier->value << " is not an array." << std::endl;
+        return nullptr;
+    }
+
+    llvm::Type *elementType = arrayType->getArrayElementType();
+
+    llvm::Value *indexValue = context.builder.getInt32(index);
+    llvm::Value *elementPtr = context.builder.CreateInBoundsGEP(
+        arrayType,
+        arrayPtr,
+        {context.builder.getInt32(0), indexValue},
+        identifier->value + "_access");
+
+    return context.builder.CreateLoad(elementType, elementPtr, identifier->value + "_loaded");
+}
+
+llvm::Value *ExpressionStatement::codeGeneration(CodeGenContext &context)
+{
+    return expression->codeGeneration(context);
+}
+
+llvm::Value *ArrayDeclaration::codeGeneration(CodeGenContext &context)
+{
+    llvm::Type *elementType;
+    switch (type)
+    {
+    case TokenType::INT:
+        elementType = llvm::Type::getInt32Ty(context.llvmContext);
+        break;
+    case TokenType::FLOAT:
+        elementType = llvm::Type::getFloatTy(context.llvmContext);
+        break;
+    case TokenType::BOOL:
+        elementType = llvm::Type::getInt1Ty(context.llvmContext); // 1-bit integer
+        break;
+    case TokenType::CHAR:
+        elementType = llvm::Type::getInt8Ty(context.llvmContext); // 8-bit integer
+        break;
+    case TokenType::STR:
+        elementType = llvm::PointerType::getInt8Ty(context.llvmContext);
+        break;
+    default:
+        std::cerr << "Unsupported array type." << std::endl;
+        return nullptr;
+    }
+    llvm::ArrayType *arrayType = llvm::ArrayType::get(elementType, size);
+    llvm::AllocaInst *arrayAlloc = context.builder.CreateAlloca(arrayType, nullptr, identifier->value);
+    context.locals()[identifier->value] = arrayAlloc;
+
+    if (!initValues.empty())
+    {
+        for (size_t i = 0; i < initValues.size(); ++i)
+        {
+            llvm::Value *initValue = initValues[i]->codeGeneration(context);
+            llvm::Value *index = context.builder.getInt32(i);
+
+            // Get pointer to the array element
+            llvm::Value *elementPtr = context.builder.CreateInBoundsGEP(
+                arrayType,
+                arrayAlloc,
+                {context.builder.getInt32(0), index},
+                identifier->value + "_elem_ptr");
+
+            context.builder.CreateStore(initValue, elementPtr);
         }
     }
 
     return arrayAlloc;
 }
 
-llvm::Value *VariableReferencing::codeGeneration() {
-    llvm::Value *V = NamedValues[varName];
-    if (!V)
-       logError("Unknown variable name");
-    return V;
-}
-
-llvm::Value *Binary::codeGeneration() {
-    llvm::Value *left = leftOperand->codeGeneration();
-    llvm::Value *right = rightOperand->codeGeneration();
-    if (!left || !right)
-        return nullptr;
-
-    llvm::Type *leftType = left->getType();
-    llvm::Type *rightType = right->getType();
-
-  if (leftType != rightType) {
-      logError("operands must be same type");
-  };
-
-  if (_operator.value == "==") {
-      if (leftType->isFloatingPointTy()) {
-          llvm::Value* res = Builder->CreateFCmpUEQ(left, right, "cmpeqtmp");
-          return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext), "booltmp");
-      }
-
-      if (leftType->isIntegerTy()) {
-          llvm::Value* res = Builder->CreateICmpEQ(left, right, "cmpeqtmp");
-          return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext), "booltmp");
-      }
-  }
-
-  if (_operator.value == "!=") {
-     if (leftType->isFloatingPointTy()) {
-         llvm::Value *res = Builder->CreateFCmpUNE(left, right, "cmpnetmp");
-        return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext), "booltmp");
-     }
-
-     if (leftType->isIntegerTy()) {
-         llvm::Value *res = Builder->CreateICmpNE(left, right, "cmpnetmp");
-         return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext), "booltmp");
-     }
-
-     return logError("Invalid operand type for '!='");
-  }
-
-  if (_operator.value == ">=") {
-      if (leftType->isFloatingPointTy()) {
-          llvm::Value* res = Builder->CreateFCmpUGE(left, right, "cmpgetmp");
-          return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext), "booltmp");
-      }
-
-      if (leftType->isIntegerTy()) {
-          llvm::Value* res = Builder->CreateICmpSGE(left, right, "cmpgetmp");
-          return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext), "booltmp");
-      }
-
-      return logError("Invalid operand type for '>='");
-  }
-
-  if (_operator.value == "<=") {
-      if (leftType->isFloatingPointTy()) {
-          llvm::Value* res = Builder->CreateFCmpULE(left, right, "cmpletmp");
-          return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext), "booltmp");
-      }
-
-      if (leftType->isIntegerTy()) {
-          llvm::Value* res = Builder->CreateICmpSLE(left, right, "cmpletmp");
-          return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext), "booltmp");
-      }
-
-      return logError("Invalid operand type for '<='");
-  }
-
-  switch (_operator.value[0]) {
-      case '+':
-          return Builder->CreateFAdd(left, right, "addtmp");
-      case '-':
-          return Builder->CreateFSub(left, right, "subtmp");
-      case '*':
-          return Builder->CreateFMul(left, right, "divtmp");
-      case '/':
-           return Builder->CreateFDiv(left, right, "multmp");
-      case '<':
-           if (leftType->isFloatingPointTy()) {
-               llvm::Value* res = Builder->CreateFCmpUGT(left, right, "cmpgttmp");
-               return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext),
-                                            "booltmp");
-           }
-
-           if (leftType->isIntegerTy()) {
-               llvm::Value* res = Builder->CreateICmpULT(left, right, "cmpgttmp");
-               return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext),
-                                            "booltmp");
-           }
-
-          logError("invalid operand type");
-      case '>':
-           if (leftType->isFloatingPointTy()) {
-               llvm::Value* res = Builder->CreateFCmpUGT(left, right, "cmplttmp");
-               return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext),
-                                            "booltmp");
-           }
-
-           // or CreateUITo ??
-          if (leftType->isIntegerTy()) {
-              llvm::Value* res = Builder->CreateICmpUGT(left, right, "cmpgttmp");
-              return Builder->CreateUIToFP(res, llvm::Type::getDoubleTy(*TheContext),
-                                           "booltmp");
-          }
-
-          logError("invalid operand type");
-      default:
-          return logError("invalid binary operator");
-    }
-}
-
-
-llvm::Value* StringLiteral::codeGeneration() {
-    llvm::Constant* stringConstant = llvm::ConstantDataArray::getString(*TheContext, value, true);
-
-    llvm::GlobalVariable* globalString = new GlobalVariable(
-            &TheModule,
-            stringConstant->getType(),
-            true,
-            GlobalValue::PrivateLinkage,
-            stringConstant,
-            ".str"
-    );
-
-    llvm::Value* stringPtr = Builder.CreateInBoundsGEP(
-            globalString->getValueType(),
-            globalString,
-            {Builder->getInt32(0), Builder->getInt32(0)},
-            "str_ptr"
-    );
-
-    return stringPtr;
-};
-
-llvm::Value* BoolLiteral::codeGeneration() {
-    return llvm::ConstantInt::get(Builder->getInt1Ty(), value);
-}
-
-llvm::Value* CharLiteral::codeGeneration() {
-    return llvm::ConstantInt::get(Builder->getInt8Ty(), static_cast<uint8_t>(value));
-}
-
-llvm::Value* Identifier::codeGeneration() {
-    llvm::Value* result = NamedValues[result];
-
-    if (!result) {
-        throw std::runtime_error("Undefined identifier: " + value);
+llvm::Value *VariableDeclaration::codeGeneration(CodeGenContext &context)
+{
+    llvm::Type *llvmType = nullptr;
+    switch (type)
+    {
+    case TokenType::INT:
+        llvmType = llvm::Type::getInt32Ty(context.llvmContext);
+        break;
+    case TokenType::FLOAT:
+        llvmType = llvm::Type::getFloatTy(context.llvmContext);
+        break;
+    case TokenType::CHAR:
+        llvmType = llvm::Type::getInt8Ty(context.llvmContext);
+        break;
+    case TokenType::STR:
+        llvmType = llvm::PointerType::getInt8Ty(context.llvmContext);
+        break;
+    case TokenType::BOOL:
+        llvmType = llvm::Type::getInt1Ty(context.llvmContext);
+        break;
     }
 
-    return result;
-}
-
-llvm::Value *UnaryExprAST::codeGeneration() {
-  Value *operandCode = operand->codeGeneration();
-  if (!operandCode)
-    return nullptr;
-
-  Function *currFunc = getFunction(std::string("unary") + _operator);
-  if (!currFunc)
-    return logError("Unknown unary operator");
-
-  return Builder->CreateCall(currFunc, operandCode, "unop");
-}
-
-llvm::Value* VariableDeclaration::codeGeneration() {
-    llvm::Type* llvmType = nullptr;
-    switch (type) {
-        case TokenType::INT:   llvmType = Builder->getInt32Ty(*TheContext); break;
-        case TokenType::FLOAT: llvmType = Builder->getFloatTy(*TheContext); break;
-        case TokenType::CHAR:  llvmType = Builder->getInt8Ty(*TheContext); break;
-        case TokenType::STR:   llvmType = Builder->getInt8PtrTy(*TheContext); break;
-        case TokenType::BOOL:  llvmType = Builder->getInt1Ty(*TheContext); break;
-    }
-
-    if (!llvmType) {
-        logError("Unsupported variable type");
+    if (!llvmType)
+    {
+        std::cerr << "Unsupported variable type" << std::endl;
         return nullptr;
     }
 
-    llvm::AllocaInst* allocaInst = Builder->CreateAlloca(llvmType, nullptr, identifier->value);
+    llvm::AllocaInst *allocaInst = context.builder.CreateAlloca(llvmType, nullptr, identifier->value);
 
-    if (initValue) {
-        llvm::Value* initVal = initValue->codeGeneration();
+    if (initValue)
+    {
+        llvm::Value *initVal = initValue->codeGeneration(context);
 
-        if (initVal->getType() != llvmType) {
-            if (llvmType->isIntegerTy() && initVal->getType()->isIntegerTy()) {
-                initVal = Builder->CreateIntCast(initVal, llvmType, true, "cast");
-            } else if (llvmType->isFloatingPointTy() && initVal->getType()->isIntegerTy()) {
-                initVal = Builder->CreateSIToFP(initVal, llvmType, "int_to_float");
-            } else if (llvmType->isIntegerTy() && initVal->getType()->isFloatingPointTy()) {
-                initVal = Builder->CreateFPToSI(initVal, llvmType, "float_to_int");
-            } else {
-                logError("Type mismatch in variable initialization");
+        if (initVal->getType() != llvmType)
+        {
+            if (llvmType->isIntegerTy() && initVal->getType()->isIntegerTy())
+            {
+                initVal = context.builder.CreateIntCast(initVal, llvmType, true, "cast");
+            }
+            else if (llvmType->isFloatingPointTy() && initVal->getType()->isIntegerTy())
+            {
+                initVal = context.builder.CreateSIToFP(initVal, llvmType, "int_to_float");
+            }
+            else if (llvmType->isIntegerTy() && initVal->getType()->isFloatingPointTy())
+            {
+                initVal = context.builder.CreateFPToSI(initVal, llvmType, "float_to_int");
+            }
+            else
+            {
+                std::cerr << "Type mismatch in variable initialization" << std::endl;
                 return nullptr;
             }
         }
 
-        Builder->CreateStore(initVal, allocaInst);
+        context.builder.CreateStore(initVal, allocaInst);
     }
-
-    NamedValues[identifier->value] = allocaInst;
+    context.locals()[identifier->value] = allocaInst;
     return allocaInst;
 }
 
-/*Value* Assignment::codeGeneration() {
-    Value* varPtr = NamedValues[varName];
-    if (!varPtr) {
-        throw std::runtime_error("Undefined variable: " + varName);
-    }
+llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
+{
+    llvm::Value *varPtr = identifier->codeGeneration(context);
 
-    Value* exprValue = value->codeGeneration();
+    llvm::Value *exprValue = value->codeGeneration(context);
 
-    llvm::Type* varType = varPtr->getType()->getPointerElementType();
-    if (exprValue->getType() != varType) {
-        if (varType->isIntegerTy() && exprValue->getType()->isIntegerTy()) {
-            exprValue = Builder.CreateIntCast(exprValue, varType, true, "cast");
-        } else if (varType->isFloatingPointTy() && exprValue->getType()->isIntegerTy()) {
-            exprValue = Builder.CreateSIToFP(exprValue, varType, "int_to_float");
-        } else if (varType->isIntegerTy() && exprValue->getType()->isFloatingPointTy()) {
-            exprValue = Builder.CreateFPToSI(exprValue, varType, "float_to_int");
-        } else {
-            throw std::runtime_error("Type mismatch in assignment to " + varName);
+    llvm::Type *varType = varPtr->getType();
+    if (exprValue->getType() != varType)
+    {
+        if (varType->isIntegerTy() && exprValue->getType()->isIntegerTy())
+        {
+            exprValue = context.builder.CreateIntCast(exprValue, varType, true, "cast");
+        }
+        else if (varType->isFloatingPointTy() && exprValue->getType()->isIntegerTy())
+        {
+            exprValue = context.builder.CreateSIToFP(exprValue, varType, "int_to_float");
+        }
+        else if (varType->isIntegerTy() && exprValue->getType()->isFloatingPointTy())
+        {
+            exprValue = context.builder.CreateFPToSI(exprValue, varType, "float_to_int");
+        }
+        else
+        {
+            std::cerr << "Type mismatch in assignment" << std::endl;
+            return nullptr;
         }
     }
 
-    Builder.CreateStore(exprValue, varPtr);
+    context.builder.CreateStore(exprValue, varPtr);
     return exprValue;
-}*/
+}
 
-void *Print::codeGeneration() {
-    llvm::Value* value = expr->codeGeneration();
-    llvm::Type* valueType = value->getType();
-    Function* printfFunc = TheModule->getFunction("printf");
-    if (!printfFunc) {
-        llvm::FunctionType* printfType = llvm::FunctionType::get(
-                Builder.getInt32Ty(),
-                llvm::PointerType::get(Builder.getInt8Ty(), 0),
-                true
-        );
-        printfFunc = Function::Create(
-                printfType, Function::ExternalLinkage, "printf", &TheModule);
+llvm::Value *Print::codeGeneration(CodeGenContext &context)
+{
+    llvm::Value *value = expr->codeGeneration(context);
+    if (!value)
+    {
+        return nullptr;
     }
 
-    llvm::Value* formatStr = nullptr;
-    if (valueType->isIntegerTy(32)) {
-        formatStr = Builder.CreateGlobalStringPtr("%d\n", "formatStr");
-    } else if (valueType->isFloatingPointTy()) {
-        formatStr = Builder.CreateGlobalStringPtr("%f\n", "formatStr");
-    } else if (valueType->isIntegerTy(1)) {
-        formatStr = Builder.CreateGlobalStringPtr("%d\n", "formatStr");
-    } else if (valueType->isIntegerTy(8)) {
-        formatStr = Builder.CreateGlobalStringPtr("%c\n", "formatStr");
-    } else if (valueType->isPointerTy() && valueType->getPointerElementType()->isIntegerTy(8)) {
-        formatStr = Builder.CreateGlobalStringPtr("%s\n", "formatStr");
-    } else {
-        throw std::runtime_error("Unsupported type for print");
+    llvm::Type *valueType = value->getType();
+    llvm::FunctionType *printfType = llvm::FunctionType::get(
+        context.builder.getInt32Ty(),
+        llvm::PointerType::get(context.builder.getInt8Ty(), 0),
+        true);
+
+    llvm::FunctionCallee printfFunc = context.module->getOrInsertFunction("printf", printfType);
+
+    llvm::Value *formatStr = nullptr;
+    if (valueType->isIntegerTy(32))
+    {
+        formatStr = context.builder.CreateGlobalStringPtr("%d\n", "formatStr");
+    }
+    else if (valueType->isFloatingPointTy())
+    {
+        formatStr = context.builder.CreateGlobalStringPtr("%f\n", "formatStr");
+    }
+    else if (valueType->isIntegerTy(1))
+    {
+        formatStr = context.builder.CreateGlobalStringPtr("%d\n", "formatStr");
+    }
+    else if (valueType->isIntegerTy(8))
+    {
+        formatStr = context.builder.CreateGlobalStringPtr("%c\n", "formatStr");
+    }
+    else if (valueType->isPointerTy())
+    {
+        formatStr = context.builder.CreateGlobalStringPtr("%s\n", "formatStr");
+    }
+    else
+    {
+        return nullptr;
     }
 
-    return Builder.CreateCall(printfFunc, {formatStr, value}, "printCall");
+    return context.builder.CreateCall(printfFunc, {formatStr, value}, "printCall");
 };
 
-llvm::Value *Block::codeGeneration() {
-    llvm::Value* lastValue = nullptr;
-    for (const auto& statement : statementList) {
-        if (statement) {
-            lastValue = statement->codeGeneration();
+llvm::Value *Block::codeGeneration(CodeGenContext &context)
+{
+    llvm::Value *lastValue = nullptr;
+    llvm::Function *function = context.builder.GetInsertBlock()->getParent();
+    std::unique_ptr<llvm::BasicBlock> basicBlock(llvm::BasicBlock::Create(context.llvmContext, "block", function, 0));
+    context.pushBlock(std::move(basicBlock));
+
+    for (const auto &statement : statementList)
+    {
+        if (statement)
+        {
+            lastValue = statement->codeGeneration(context);
         }
     }
+
+    context.popBlock();
 
     return lastValue;
 };
 
-llvm::Value *Condition::codeGeneration() {
-    llvm::Value *condition = ifBlock->codeGeneration();
+llvm::Value *Condition::codeGeneration(CodeGenContext &context)
+{
+    llvm::Value *condition = ifBlock->codeGeneration(context);
     if (!condition)
         return nullptr;
 
-    condV = Builder->CreateFCmpONE(
-        condV, ConstantFP::get(*TheContext, APFloat(0.0)), "ifcond");
+    condition = context.builder.CreateFCmpONE(condition, context.builder.getInt32(0), "ifcond");
 
-    Function *currFunc = Builder->GetInsertBlock()->getParent();
+    llvm::Function *currFunc = context.builder.GetInsertBlock()->getParent();
 
-    llvm::BasicBlock *thenBl = llvm::BasicBlock::Create(*TheContext, "then", currFunc);
-    llvm::BasicBlock *elseBl = llvm::BasicBlock::Create(*TheContext, "else");
-    llvm::BasicBlock *mergeBl = llvm::BasicBlock::Create(*TheContext, "ifcont");
+    llvm::BasicBlock *thenBl = llvm::BasicBlock::Create(context.llvmContext, "then", currFunc);
+    llvm::BasicBlock *elseBl = llvm::BasicBlock::Create(context.llvmContext, "else");
+    llvm::BasicBlock *mergeBl = llvm::BasicBlock::Create(context.llvmContext, "ifcont");
 
-    Builder->CreateCondBr(condition, thenBl, elseBl);
+    context.builder.CreateCondBr(condition, thenBl, elseBl);
 
-    Builder->SetInsertPoint(thenBl);
+    context.builder.SetInsertPoint(thenBl);
 
-    llvm::Value *thenV = thenBlock->codeGeneration();
+    llvm::Value *thenV = ifBlock->codeGeneration(context);
     if (!thenV)
         return nullptr;
 
-    Builder->CreateBr(mergeBl);
-    thenBl = Builder->GetInsertBlock();
+    context.builder.CreateBr(mergeBl);
+    thenBl = context.builder.GetInsertBlock();
 
     currFunc->insert(currFunc->end(), elseBl);
-    Builder->SetInsertPoint(elseBl);
+    context.builder.SetInsertPoint(elseBl);
 
-    llvm::Value *elseV = elseBlock->codeGeneration();
+    llvm::Value *elseV = elseBlock->codeGeneration(context);
     if (!elseV)
         return nullptr;
 
-    Builder->CreateBr(mergeBl);
-    elseBl = Builder->GetInsertBlock();
+    context.builder.CreateBr(mergeBl);
+    elseBl = context.builder.GetInsertBlock();
 
     currFunc->insert(currFunc->end(), mergeBl);
-    Builder->SetInsertPoint(mergeBl);
-    llvm::PHINode *PN = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2, "iftmp");
+    context.builder.SetInsertPoint(mergeBl);
+    llvm::PHINode *PN = context.builder.CreatePHI(llvm::Type::getDoubleTy(context.llvmContext), 2, "iftmp");
 
-    PN->addIncoming(thenV, thenBl;
+    PN->addIncoming(thenV, thenBl);
     PN->addIncoming(elseV, elseBl);
     return PN;
 }
 
-llvm::Value* ForLoop::codeGeneration() {
-    Function *function = Builder->GetInsertBlock()->getParent();
-    llvm::BasicBlock *loopHeader = llvm::BasicBlock::Create(*TheContext, "loopHeader", function);
-    llvm::BasicBlock *loopBody = llvm::BasicBlock::Create(*TheContext, "loopBody", function);
-    llvm::BasicBlock *loopEnd = llvm::BasicBlock::Create(*TheContext, "loopEnd", function);
+llvm::Value *ForLoop::codeGeneration(CodeGenContext &context)
+{
+    llvm::Function *function = context.builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock *loopHeader = llvm::BasicBlock::Create(context.llvmContext, "loopHeader", function);
+    llvm::BasicBlock *loopBody = llvm::BasicBlock::Create(context.llvmContext, "loopBody", function);
+    llvm::BasicBlock *loopEnd = llvm::BasicBlock::Create(context.llvmContext, "loopEnd", function);
 
-    if (initializer) {
-        initializer->codeGeneration();
+    if (initializer)
+    {
+        initializer->codeGeneration(context);
     }
 
-    Builder->CreateBr(loopHeader);
-    Builder->SetInsertPoint(loopHeader);
+    context.builder.CreateBr(loopHeader);
+    context.builder.SetInsertPoint(loopHeader);
 
-    llvm::Value *condValue = condition->codeGeneration();
-    if (!condValue) {
-        logError("Unsupported condition");
+    llvm::Value *condValue = condition->codeGeneration(context);
+    if (!condValue)
+    {
         return nullptr;
     }
 
-    Builder->CreateCondBr(condValue, loopBody, loopEnd);
+    context.builder.CreateCondBr(condValue, loopBody, loopEnd);
 
-    Builder->SetInsertPoint(loopBody);
-    if (body) {
-        body->codeGeneration();
+    context.builder.SetInsertPoint(loopBody);
+    if (body)
+    {
+        body->codeGeneration(context);
     }
 
-    if (update) {
-        update->codeGeneration();
+    if (update)
+    {
+        update->codeGeneration(context);
     }
 
-    Builder->CreateBr(loopHeader);
-    Builder->SetInsertPoint(loopEnd);
+    context.builder.CreateBr(loopHeader);
+    context.builder.SetInsertPoint(loopEnd);
 
     return nullptr;
 }
 
-llvm::Value *WhileLoop::codeGeneration() {
-    Function* parentFunction = Builder->GetInsertBlock()->getParent();
+llvm::Value *WhileLoop::codeGeneration(CodeGenContext &context)
+{
+    llvm::Function *parentFunction = context.builder.GetInsertBlock()->getParent();
 
-    llvm::BasicBlock* condBlock = llvm::BasicBlock::Create(*TheContext, "while.cond", parentFunction);
-    llvm::BasicBlock* bodyBlock = llvm::BasicBlock::Create(*TheContext, "while.body", parentFunction);
-    llvm::BasicBlock* endBlock = llvm::BasicBlock::Create(*TheContext, "while.end", parentFunction);
+    llvm::BasicBlock *condBlock = llvm::BasicBlock::Create(context.llvmContext, "while.cond", parentFunction);
+    llvm::BasicBlock *bodyBlock = llvm::BasicBlock::Create(context.llvmContext, "while.body", parentFunction);
+    llvm::BasicBlock *endBlock = llvm::BasicBlock::Create(context.llvmContext, "while.end", parentFunction);
 
-    Builder.CreateBr(condBlock);
-    Builder.SetInsertPoint(condBlock);
-    llvm::Value* condValue = condition->codeGeneration();
-    if (!condValue) {
-        throw std::runtime_error("Failed to generate condition for while loop");
+    context.builder.CreateBr(condBlock);
+    context.builder.SetInsertPoint(condBlock);
+    llvm::Value *condValue = condition->codeGeneration(context);
+    if (!condValue)
+    {
+        std::cerr << "Failed to generate condition for while loop" << std::endl;
     }
 
-    if (condValue->getType()->isIntegerTy() && condValue->getType()->getIntegerBitWidth() != 1) {
-        condValue = Builder.CreateICmpNE(condValue, Builder.getInt32(0), "while.cond.bool");
-    } else if (!condValue->getType()->isIntegerTy(1)) {
-        throw std::runtime_error("Condition of while loop must be boolean");
+    if (condValue->getType()->isIntegerTy() && condValue->getType()->getIntegerBitWidth() != 1)
+    {
+        condValue = context.builder.CreateICmpNE(condValue, context.builder.getInt32(0), "while.cond.bool");
+    }
+    else if (!condValue->getType()->isIntegerTy(1))
+    {
+        std::cerr << "Condition of while loop must be boolean" << std::endl;
+        return nullptr;
     }
 
-    Builder.CreateCondBr(condValue, bodyBlock, endBlock);
-    Builder.SetInsertPoint(bodyBlock);
-    llvm::Value* bodyValue = body->codeGeneration();
-    Builder.CreateBr(condBlock);
-    Builder.SetInsertPoint(endBlock);
+    context.builder.CreateCondBr(condValue, bodyBlock, endBlock);
+    context.builder.SetInsertPoint(bodyBlock);
+    llvm::Value *bodyValue = body->codeGeneration(context);
+    context.builder.CreateBr(condBlock);
+    context.builder.SetInsertPoint(endBlock);
     return nullptr;
 };
 
-/*Function *PrototypeAST::codeGeneration() {
-  std::vector<Type*> Doubles(args.size(), Type::getDoubleTy(*TheContext));
-  FunctionType *funcType =
-      FunctionType::get(Type::getDoubleTy(*TheContext), Doubles, false);
-
-  Function *func =
-      Function::Create(funcType, Function::ExternalLinkage, name, TheModule.get());
-
-  unsigned index = 0;
-  for (auto &Arg : func->args())
-    Arg.setName(args[index++]);
-
-  return func;
-}*/
-
-llvm::Function *PrototypeFunction::codeGeneration() {
-    std::vector<llvm::Type*> argsNumbers(args.size());
-    for (int i = 0; i < args.size(); i++) {
-        if (args.first.type == TokenType.INT) {
-            argsNumbers[i] = Type::getINT32Ty(*TheContext)
-        }
-
-        if (args.first.type == TokenType.DOUBLE) {
-            argsNumbers[i] = Type::getDoubleTy(*TheContext)
-        }
-
-        if (args.first.type == TokenType.FLOAT) {
-            argsNumbers[i] = Type::getFloatTy(*TheContext)
-        }
-
-        if (args.first.type == TokenType.FLOAT) {
-            argsNumbers[i] = Type::getINT8Ty(*TheContext)
-        }
-
-        if (args.first.type == TokenType.BOOL) {
-            argsNumbers[i] = Type::getINT1Ty(*TheContext)
+llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
+{
+    std::vector<llvm::Type *> argTypes(args.size());
+    for (int i = 0; i < args.size(); i++)
+    {
+        switch (args[i].first){
+            case INT:
+                argTypes[i] = llvm::Type::getInt32Ty(context.llvmContext);
+                break;
+            case FLOAT:
+                argTypes[i] = llvm::Type::getFloatTy(context.llvmContext);
+                break;
+            case STR:
+                argTypes[i] = llvm::PointerType::getInt8Ty(context.llvmContext);
+                break;
+            case CHAR:
+                argTypes[i] = llvm::Type::getInt8Ty(context.llvmContext);
+                break;
+            case BOOL:
+                argTypes[i] = llvm::Type::getInt1Ty(context.llvmContext);
+                break;
         }
     }
 
-    llvm::FunctionType *funcType =
-            llvm::FunctionType::get(Type::getDoubleTy(*TheContext), Doubles, false);
-
-    llvm::Function *func =
-            llvm::Function::Create(funcType, Function::ExternalLinkage, name, TheModule.get());
+    llvm::Type *retType = nullptr;
+    switch (returnType){
+        case INT:
+            retType = llvm::Type::getInt32Ty(context.llvmContext);
+            break;
+        case FLOAT:
+            retType = llvm::Type::getFloatTy(context.llvmContext);
+            break;
+        case STR:
+            retType = llvm::PointerType::getInt8Ty(context.llvmContext);
+            break;
+        case CHAR:
+            retType = llvm::Type::getInt8Ty(context.llvmContext);
+            break;
+        case BOOL:
+            retType = llvm::Type::getInt1Ty(context.llvmContext);
+            break;
+        case VOID:
+            retType = llvm::Type::getVoidTy(context.llvmContext);
+            break;
+        default:
+            return nullptr;
+    }
+    llvm::FunctionType *funcType = llvm::FunctionType::get(retType, argTypes, false);
+    llvm::Function *func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, name, context.module.get());
 
     unsigned index = 0;
-    for (auto &Arg : func->args())
-        Arg.setName(args[index++]);
+    for (auto &arg : func->args())
+        arg.setName(args[index++].second);
 
     return func;
 }
 
-llvm::Function *Function::codeGeneration() {
-    auto &prototype = *proto;
-    FunctionProtos[proto->name] = std::move(proto);
-    llvm::Function *currFunction = getFunction(prototype.name);
-    if (!currFunction)
-        currFunction = proto->codeGeneration();
-
-    if (!currFunction)
+llvm::Value *Function::codeGeneration(CodeGenContext &context)
+{
+    llvm::Function* function = static_cast<llvm::Function*>(proto->codeGeneration(context));
+    if (!function) {
+        std::cerr << "Failed to generate function prototype" << std::endl;
         return nullptr;
-
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(*TheContext, "entry", currFunction);
-    Builder->SetInsertPoint(block);
-
-    NamedValues.clear();
-    for (auto &Arg : currFunction->args()) {
-        llvm::AllocaInstance *allocated = CreateEntryBlockAlloca(currFunction, Arg.getName());
-        Builder->CreateStore(&Arg, allocated);
-
-        NamedValues[std::string(Arg.getName())] = &allocated;
     }
 
-    if (llvm::Value *returnValue = body->codeGeneration()) {
-        Builder->CreateRet(returnValue);
-        llvm::verifyFunction(*currFunction);
-        return currFunction;
+    llvm::BasicBlock *block = llvm::BasicBlock::Create(context.llvmContext, "entry", function);
+    context.builder.SetInsertPoint(block);
+
+    context.pushBlock(std::unique_ptr<llvm::BasicBlock>(block));
+
+    for (auto &arg : function->args())
+    {
+        llvm::AllocaInst* alloc = context.builder.CreateAlloca(arg.getType(), nullptr, arg.getName());
+        
+        context.builder.CreateStore(&arg, alloc);
+
+        context.locals()[arg.getName().str()] = alloc;
     }
 
-    currFunction->eraseFromParent();
-    return nullptr;
-}
-
-llvm::Value *CallFunction::codeGeneration() {
-    llvm::Function *CalleeF = TheModule->getFunction(functionName);
-    if (!CalleeF)
-        return logError("Unknown function referenced");
-
-    if (CalleeF->arg_size() != functionArgs.size())
-        return logError("Incorrect # arguments passed");
-
-    std::vector<llvm::Value *> ArgsV;
-    for (unsigned i = 0, e = functionArgs.size(); i != e; ++i) {
-        ArgsV.push_back(functionArgs[i]->codeGeneration());
-        if (!ArgsV.back())
+    if (proto->returnType == VOID) {
+        context.builder.CreateRetVoid();
+    } else {
+        if (llvm::Value *returnValue = body->codeGeneration(context)) {
+            context.builder.CreateRet(returnValue);
+        } else {
+            function->eraseFromParent();
             return nullptr;
+        }
     }
 
-    return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+    llvm::verifyFunction(*function);
+    return function;
 }
 
-// в туториале у чела BasicBlock хранится, у нас такого нет, я хз че делать тоже
-llvm::Value* Return::codeGeneration() {
-    llvm::Value *returnValue = expr->codeGeneration();
-    if (!returnValue) {
+llvm::Value *Return::codeGeneration(CodeGenContext &context)
+{
+    llvm::Value *returnValue = expr->codeGeneration(context);
+    if (!returnValue)
+    {
         return nullptr;
     }
 
-    llvm::Function *currentFunction = Builder->GetInsertBlock()->getParent();
-    if (!currentFunction) {
+    llvm::Function *currentFunction = context.builder.GetInsertBlock()->getParent();
+    if (!currentFunction)
+    {
         return nullptr;
     }
 
     llvm::Type *returnType = currentFunction->getReturnType();
-    if (returnType != returnValue->getType()) {
-        returnValue = Builder->CreateBitCast(returnValue, returnType, "casted_return_value");
+    if (returnType != returnValue->getType())
+    {
+        returnValue = context.builder.CreateBitCast(returnValue, returnType, "casted_return_value");
     }
 
-    Builder->CreateRet(returnValue);
+    context.builder.CreateRet(returnValue);
 
     return nullptr;
 }
