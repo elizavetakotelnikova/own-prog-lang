@@ -2,15 +2,16 @@
 #include "llvm/Support/Error.h"
 
 llvm::LLVMContext TheContext;
+CodeGenContext TheCodeGen;
 std::unique_ptr<llvm::Module> TheModule;
 std::unique_ptr<llvm::IRBuilder<>> Builder;
 
-llvm::orc::ThreadSafeModule irgenAndTakeOwnership(Function &FnAST, const std::string &Suffix) {
-    FnAST.codeGeneration();
+llvm::orc::ThreadSafeModule irgenAndTakeOwnership(FunctionNode &FnAST, const std::string &Suffix) {
+    FnAST.codeGeneration(TheCodeGen);
     return llvm::orc::ThreadSafeModule(std::move(TheModule), std::make_unique<llvm::LLVMContext>());
 }
 
-Expected<std::unique_ptr<OwnProgLangJIT>> OwnProgLangJIT::Create() {
+llvm::Expected<std::unique_ptr<llvm::orc::OwnProgLangJIT>> llvm::orc::OwnProgLangJIT::Create() {
     auto EPC = SelfExecutorProcessControl::Create();
     if (!EPC)
         return EPC.takeError();
@@ -38,65 +39,56 @@ Expected<std::unique_ptr<OwnProgLangJIT>> OwnProgLangJIT::Create() {
                                            std::move(*DL));
 }
 
-Error OwnProgLangJIT::addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nullptr) {
+llvm::Error llvm::orc::OwnProgLangJIT::addModule(ThreadSafeModule TSM, ResourceTrackerSP RT) {
     if (!RT)
         RT = MainJD.getDefaultResourceTracker();
 
     return TransformLayer.add(RT, std::move(TSM));
 }
 
-Error OwnProgLangJIT::addAST(std::unique_ptr<Function> F, ResourceTrackerSP RT = nullptr) {
+llvm::Error llvm::orc::OwnProgLangJIT::addAST(std::unique_ptr<FunctionNode> F, ResourceTrackerSP RT) {
     if (!RT)
         RT = MainJD.getDefaultResourceTracker();
     return ASTLayer.add(RT, std::move(F));
 }
 
-Expected<llvm::JITEvaluatedSymbol> OwnProgLangJIT::lookup(llvm::StringRef Name) {
+llvm::Expected<llvm::orc::ExecutorSymbolDef> llvm::orc::OwnProgLangJIT::lookup(StringRef Name) {
     return ES->lookup({&MainJD}, Mangle(Name.str()));
 }
 
-Expected<ThreadSafeModule> OwnProgLangJIT::optimizeModule(ThreadSafeModule TSM, const MaterializationResponsibility &R) {
+llvm::Expected<llvm::orc::ThreadSafeModule> llvm::orc::OwnProgLangJIT::optimizeModule(ThreadSafeModule TSM, const MaterializationResponsibility &R) {
     TSM.withModuleDo([](Module &M) {
         auto FPM = std::make_unique<legacy::FunctionPassManager>(&M);
         FPM->add(createInstructionCombiningPass());
         FPM->add(createReassociatePass());
         FPM->add(createGVNPass());
         FPM->add(createCFGSimplificationPass());
-        FPM->add(llvm::createLoopUnrollPass());
-        FPM->add(llvm::createLoopSimplifyPass());
-        FPM->add(llvm::createLoopDeletionPass());
-        FPM->add(llvm::createFunctionInliningPass());
-        FPM->add(llvm::createTailCallEliminationPass());
+        FPM->add(createLoopUnrollPass());
+        FPM->add(createTailCallEliminationPass());
         FPM->doInitialization();
 
         for (auto &F : M)
             FPM->run(F);
     });
-    return std::move(M);
+    return std::move(TSM);
 }
 
-void OwnProgLangASTMaterializationUnit::materialize(std::unique_ptr<MaterializationResponsibility> R) {
+void llvm::orc::OwnProgLangASTMaterializationUnit::materialize(std::unique_ptr<MaterializationResponsibility> R) {
     L.emit(std::move(R), std::move(F));
 }
 
-void OwnProgLangASTLayer::emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<Function> F) {
+void llvm::orc::OwnProgLangASTLayer::emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<FunctionNode> F) {
     BaseLayer.emit(std::move(MR), irgenAndTakeOwnership(*F, ""));
 }
 
-MaterializationUnit::Interface OwnProgLangASTLayer::getInterface(Function &F) {
+llvm::orc::MaterializationUnit::Interface llvm::orc::OwnProgLangASTLayer::getInterface(FunctionNode &F) {
     MangleAndInterner Mangle(BaseLayer.getExecutionSession(), DL);
     SymbolFlagsMap Symbols;
 
-    Symbols[Mangle(F.getName())] = JITSymbolFlags(JITSymbolFlags::Exported | JITSymbolFlags::Callable);
+    Symbols[Mangle(F.proto->name)] = JITSymbolFlags(JITSymbolFlags::Exported | JITSymbolFlags::Callable);
     return MaterializationUnit::Interface(std::move(Symbols), nullptr);
 }
 
-Error OwnProgLangASTLayer::add(ResourceTrackerSP RT, std::unique_ptr<Function> F) {
+llvm::Error llvm::orc::OwnProgLangASTLayer::add(ResourceTrackerSP RT, std::unique_ptr<FunctionNode> F) {
     return RT->getJITDylib().define(std::make_unique<OwnProgLangASTMaterializationUnit>(*this, std::move(F)), RT);
-}
-
-void InitializeModule() {
-    TheContext = llvm::LLVMContext();
-    TheModule = std::make_unique<llvm::Module>("OwnProgLang", TheContext);
-    Builder = std::make_unique<llvm::IRBuilder<>>(TheContext);
 }
