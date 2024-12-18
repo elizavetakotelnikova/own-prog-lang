@@ -2,6 +2,7 @@
 #include <vector>
 #include <memory>
 #include <iostream>
+#include <algorithm>
 #include "include/GCManager.h"
 
 void GCManager::addObject(GCObject* obj){
@@ -13,7 +14,10 @@ void GCManager::addRoot(GCObject* root){
 }
 
 void GCManager::removeRoot(GCObject* root){
-    roots.erase(std::remove(roots.begin(), roots.end(), root), roots.end());
+    roots.erase(
+      std::remove(roots.begin(), roots.end(), root),
+      roots.end()
+    );
 }
 
 void GCManager::collectGarbage() {

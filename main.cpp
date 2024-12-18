@@ -43,7 +43,7 @@ int main(int argc, char *argv[]){
 
 			auto *FuncNode = dynamic_cast<FunctionNode *>(node.get());
 			if (FuncNode) {
-				if (auto Err = JIT->addAST(std::make_unique<FunctionNode>(FuncNode))) {
+				if (auto Err = (*JIT)->addAST(std::make_unique<FunctionNode>(FuncNode))) {
 					llvm::errs() << "Error adding AST to JIT: " << llvm::toString(std::move(Err)) << "\n";
 					return 1;
 				}
