@@ -26,6 +26,6 @@ public:
     virtual void visitForLoop(ForLoop& node) = 0;
     virtual void visitWhileLoop(WhileLoop& node) = 0;
     virtual void visitPrototypeFunction(PrototypeFunction& node) = 0;
-    virtual void visitFunction(Function& node) = 0;
+    virtual void visitFunction(FunctionNode& node) = 0;
     virtual void visitReturn(Return& node) = 0;
 };

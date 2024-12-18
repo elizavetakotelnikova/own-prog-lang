@@ -31,7 +31,7 @@ namespace llvm
 		class OwnProgLangASTMaterializationUnit : public MaterializationUnit
 		{
 		public:
-			OwnProgLangASTMaterializationUnit::OwnProgLangASTMaterializationUnit(OwnProgLangASTLayer &L, std::unique_ptr<Function> F) : MaterializationUnit(L.getInterface(*F)), L(L), F(std::move(F)) {}
+			OwnProgLangASTMaterializationUnit(OwnProgLangASTLayer &L, std::unique_ptr<Function> F) : MaterializationUnit(L.getInterface(*F)), L(L), F(std::move(F)) {}
 
 			StringRef getName() const override
 			{
@@ -41,7 +41,7 @@ namespace llvm
 			void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
 
 		private:
-			OwnProgLangASTLayer &L;
+            OwnProgLangASTLayer &L;
 			std::unique_ptr<Function> F;
 
 			void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override

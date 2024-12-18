@@ -24,7 +24,7 @@ unique_ptr<ASTNode> Parser::logError(string error){
     return nullptr;
 }
 
-// Get current token and move to next token
+// Get current token and std::move to next token
 unique_ptr<Token> Parser::getToken(){
     return make_unique<Token>(tokenList.at(current++));
 }
@@ -52,7 +52,7 @@ unique_ptr<Token> Parser::consumeToken(TokenType type, string errorMessage)
     if (currentToken()->type == type){
         return getToken();
     }
-    throw runtime_error(errorMessage);
+    std::cerr << errorMessage;
 }
 
 unique_ptr<Statement> Parser::statement()
@@ -77,26 +77,26 @@ unique_ptr<Statement> Parser::variableDeclaration()
     if (matchToken({EQUAL})){
         initValue = expression();
         if (initValue == nullptr){
-            throw runtime_error("expect primary expression");
+            std::cerr << "expect primary expression";
         }
     }
     consumeToken(SEMICOLON, "expect a ';'");
-    return make_unique<VariableDeclaration>(type, move(identifier), move(initValue));
+    return make_unique<VariableDeclaration>(type, std::move(identifier), std::move(initValue));
 }
 
 unique_ptr<Statement> Parser::arrayDeclaration()
 {
-    if (!matchToken({INT, FLOAT, STR, CHAR, BOOL})) throw runtime_error("expect type");
+    if (!matchToken({INT, FLOAT, STR, CHAR, BOOL})) std::cerr << "expect type";
     TokenType type = previousToken()->type;
     string varName = consumeToken(IDENTIFIER, "expect variable name")->value;
     auto identifier = make_unique<Identifier>(varName);
     consumeToken(LEFT_SQUARE, "expect a '['");
     if (currentToken()->type != NUMBER_INT){
-        throw runtime_error("Size requires positive int value");
+        std::cerr << "Size requires positive int value";
     }
     int size = stoi(getToken()->value);
     if (size < 0){
-        throw runtime_error("Size requires positive int value");
+        std::cerr << "Size requires positive int value";
     }
     consumeToken(RIGHT_SQUARE, "expect a ']'");
 
@@ -107,9 +107,9 @@ unique_ptr<Statement> Parser::arrayDeclaration()
             while (true){  
                 auto initValue = expression();
                 if (initValue == nullptr){
-                    throw runtime_error("expect primary expression");
+                    std::cerr << "expect primary expression";
                 }
-                initValues.push_back(move(initValue));
+                initValues.push_back(std::move(initValue));
                 if (matchToken({COMMA})){
                     continue;
                 }
@@ -117,13 +117,13 @@ unique_ptr<Statement> Parser::arrayDeclaration()
                     break;
                 }
                 else {
-                    throw runtime_error("expect a '}'");
+                    std::cerr << "expect a '}'";
                 }
             }
         }
     }
     consumeToken(SEMICOLON, "expect a ';'");
-    return make_unique<ArrayDeclaration>(type, move(identifier), size, move(initValues));
+    return make_unique<ArrayDeclaration>(type, std::move(identifier), size, std::move(initValues));
 }
 
 unique_ptr<Statement> Parser::condition()
@@ -136,7 +136,7 @@ unique_ptr<Statement> Parser::condition()
     if (matchToken({ELSE})){
         elseBlock = statement();
     }
-    return make_unique<Condition>(move(conditionalExpr), move(ifBlock), move(elseBlock));
+    return make_unique<Condition>(std::move(conditionalExpr), std::move(ifBlock), std::move(elseBlock));
 }
 
 unique_ptr<Statement> Parser::forLoop()
@@ -165,7 +165,7 @@ unique_ptr<Statement> Parser::forLoop()
 
     auto body = statement();
     
-    return make_unique<ForLoop>(move(initializer), move(condition), move(update), move(body));
+    return make_unique<ForLoop>(std::move(initializer), std::move(condition), std::move(update), std::move(body));
 }
 
 unique_ptr<Statement> Parser::whileLoop()
@@ -174,7 +174,7 @@ unique_ptr<Statement> Parser::whileLoop()
     auto condition= logicalOR();
     consumeToken(RIGHT_PAREN, "expect a ')'");
     auto body = statement();
-    return make_unique<WhileLoop>(move(condition), move(body));
+    return make_unique<WhileLoop>(std::move(condition), std::move(body));
 }
 
 std::unique_ptr<Statement> Parser::prototypeFunction()
@@ -185,7 +185,7 @@ std::unique_ptr<Statement> Parser::prototypeFunction()
     if (!matchToken({RIGHT_PAREN})){
         while (true){
             if (!matchToken({INT, FLOAT, STR, CHAR, BOOL})){
-                throw runtime_error("expect argument type");
+                std::cerr << "expect argument type";
             }
             TokenType argType = previousToken()->type;
             string argName = consumeToken(IDENTIFIER, "expect parameter name")->value;
@@ -197,14 +197,14 @@ std::unique_ptr<Statement> Parser::prototypeFunction()
                 break;
             }
             else {
-                throw runtime_error("expect a ')'");
+                std::cerr << "expect a ')'";
             }
         }
     }
     
     consumeToken(RETURN_TYPE, "expect return type");
     if (!matchToken({INT, FLOAT, STR, CHAR, BOOL, VOID})){
-        throw runtime_error("expect return type");
+        std::cerr << "expect return type";
     }
     auto returnType = previousToken()->type;
     return make_unique<PrototypeFunction>(functionName, functionArgs, returnType);
@@ -215,7 +215,7 @@ unique_ptr<Statement> Parser::function()
     auto proto = prototypeFunction();
     consumeToken(LEFT_BRACE, "expect a '{'");
     auto body = block();
-    return make_unique<Function>(
+    return make_unique<FunctionNode>(
         unique_ptr<PrototypeFunction>(static_cast<PrototypeFunction*>(proto.release())),
         unique_ptr<Block>(static_cast<Block*>(body.release()))
     );
@@ -225,14 +225,14 @@ std::unique_ptr<Statement> Parser::returnStmt()
 {
     auto expr = expression();
     consumeToken(SEMICOLON, "expect a ';'");
-    return make_unique<Return>(move(expr));
+    return make_unique<Return>(std::move(expr));
 }
 
 unique_ptr<Statement> Parser::expressionStatement()
 {
     auto expr = expression();
     consumeToken(SEMICOLON, "expect a ';'");
-    return make_unique<ExpressionStatement>(move(expr));
+    return make_unique<ExpressionStatement>(std::move(expr));
 }
 
 unique_ptr<Statement> Parser::print()
@@ -241,7 +241,7 @@ unique_ptr<Statement> Parser::print()
     auto expr = expression();
     consumeToken(RIGHT_PAREN, "expect a ')'");
     consumeToken(SEMICOLON, "expect a ';'");
-    return make_unique<Print>(move(expr));
+    return make_unique<Print>(std::move(expr));
 }
 
 unique_ptr<Statement> Parser::block()
@@ -250,11 +250,11 @@ unique_ptr<Statement> Parser::block()
     while (currentToken()->type != RIGHT_BRACE){
         auto stmt = statement();
         if (stmt != nullptr){
-            statementList.push_back(move(stmt));
+            statementList.push_back(std::move(stmt));
         }
     }
     consumeToken(RIGHT_BRACE, "expect a '}'");
-    return make_unique<Block>(move(statementList));
+    return make_unique<Block>(std::move(statementList));
 }
 
 unique_ptr<Expression> Parser::expression(){
@@ -267,12 +267,12 @@ unique_ptr<Expression> Parser::assignment()
     if (matchToken({EQUAL})){
         auto value = expression();
         if (value == nullptr){
-            throw runtime_error("expect primary expression");
+            std::cerr << "expect primary expression";
         }
-        if (typeid(*expr) == typeid(Identifier)){
-            return make_unique<Assignment>(move(expr), move(value));
+        if (dynamic_cast<Identifier*>(expr.get()) != nullptr) {
+            return std::make_unique<Assignment>(std::move(expr), std::move(value));
         }
-        throw runtime_error("Invalid assignment target");
+        std::cerr << "Invalid assignment target";
     }
     return expr;
 }
@@ -283,7 +283,7 @@ unique_ptr<Expression> Parser::logicalOR()
     while (matchToken({LOGICAL_OR})){
         Token _operator = *previousToken();
         auto right = logicalAND();
-        expr = make_unique<Binary>(_operator, move(expr), move(right));
+        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }
@@ -294,7 +294,7 @@ unique_ptr<Expression> Parser::logicalAND()
     while (matchToken({LOGICAL_AND})){
         Token _operator = *previousToken();
         auto right = bitwiseOR();
-        expr = make_unique<Binary>(_operator, move(expr), move(right));
+        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }
@@ -305,7 +305,7 @@ unique_ptr<Expression> Parser::bitwiseOR()
     while (matchToken({BITWISE_OR})){
         Token _operator = *previousToken();
         auto right = bitwiseXOR();
-        expr = make_unique<Binary>(_operator, move(expr), move(right));
+        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }
@@ -316,7 +316,7 @@ unique_ptr<Expression> Parser::bitwiseXOR()
     while (matchToken({BITWISE_XOR})){
         Token _operator = *previousToken();
         auto right = bitwiseAND();
-        expr = make_unique<Binary>(_operator, move(expr), move(right));
+        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }
@@ -327,7 +327,7 @@ unique_ptr<Expression> Parser::bitwiseAND()
     while (matchToken({BITWISE_AND})){
         Token _operator = *previousToken();
         auto right = equality();
-        expr = make_unique<Binary>(_operator, move(expr), move(right));
+        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }
@@ -337,7 +337,7 @@ unique_ptr<Expression> Parser::equality(){
     while (matchToken({EQUAL_EQUAL, NOT_EQUAL})){
         Token _operator = *previousToken();
         auto right = comparison();
-        expr = make_unique<Binary>(_operator, move(expr), move(right));
+        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }
@@ -347,7 +347,7 @@ unique_ptr<Expression> Parser::comparison(){
     while (matchToken({GREATER, GREATER_EQUAL, LESS, LESS_EQUAL})){
         Token _operator = *previousToken();
         auto right = term();
-        expr = make_unique<Binary>(_operator, move(expr), move(right));
+        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }
@@ -357,7 +357,7 @@ unique_ptr<Expression> Parser::term(){
     while (matchToken({PLUS, MINUS})){
         Token _operator = *previousToken();
         auto right = factor();
-        expr = make_unique<Binary>(_operator, move(expr), move(right));
+        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }
@@ -367,7 +367,7 @@ unique_ptr<Expression> Parser::factor(){
     while (matchToken({MULTIPLY, DIVIDE, MODULO})){
         Token _operator = *previousToken();
         auto right = unary();
-        expr = make_unique<Binary>(_operator, move(expr), move(right));
+        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }
@@ -376,7 +376,7 @@ unique_ptr<Expression> Parser::unary(){
     if (matchToken({NOT, MINUS})){
         Token _operator = *previousToken();
         auto right = unary();
-        return make_unique<Unary>(_operator, move(right));
+        return make_unique<Unary>(_operator, std::move(right));
     }
     return primary();
 }
@@ -408,20 +408,20 @@ unique_ptr<Expression> Parser::identifier()
             while (true){
                 auto expr = expression();
                 if (expr == nullptr){
-                    throw runtime_error("expected primary-expression");
+                    std::cerr << "expected primary-expression";
                 }
-                functionArgs.push_back(move(expr));
+                functionArgs.push_back(std::move(expr));
                 if (matchToken({RIGHT_PAREN})){
                     break;
                 }
                 else if (matchToken({COMMA})){
                     continue;
                 } else {
-                    throw runtime_error("expected ')' ");
+                    std::cerr << "expected ')' ";
                 }
             }
         }
-        auto callFunc = make_unique<CallFunction>(move(functionName), move(functionArgs));
+        auto callFunc = make_unique<CallFunction>(std::move(functionName), std::move(functionArgs));
         return callFunc;
     }
     else if (currentToken()->type == LEFT_SQUARE){ // Access an element of array
@@ -429,12 +429,12 @@ unique_ptr<Expression> Parser::identifier()
         auto identifier = make_unique<Identifier>(identifierName);
         getToken();
         if (currentToken()->type != NUMBER_INT){
-            throw runtime_error("index must be an int number");
+            std::cerr << "index must be an int number";
         }
         int index = stoi(getToken()->value);
-        if (index < 0) throw runtime_error("index must be positive");
+        if (index < 0) std::cerr << "index must be positive";
         consumeToken(RIGHT_SQUARE, "expect a ']'");
-        return make_unique<ArrayAccess>(move(identifier), index);
+        return make_unique<ArrayAccess>(std::move(identifier), index);
     } 
     else { 
         return make_unique<Identifier>(previousToken()->value); // Just a variable
@@ -443,7 +443,7 @@ unique_ptr<Expression> Parser::identifier()
 
 vector<unique_ptr<ASTNode>> Parser::getASTNodeList()
 {
-    return move(ASTNodeList);
+    return std::move(ASTNodeList);
 }
 
 void Parser::parse()
@@ -457,7 +457,7 @@ void Parser::parse()
         else {
             node = statement();
         }
-        ASTNodeList.push_back(move(node));
+        ASTNodeList.push_back(std::move(node));
     }
 }
 

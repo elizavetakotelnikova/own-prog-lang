@@ -567,7 +567,7 @@ llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
     return func;
 }
 
-llvm::Value *Function::codeGeneration(CodeGenContext &context)
+llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
 {
     llvm::Function* function = static_cast<llvm::Function*>(proto->codeGeneration(context));
     if (!function) {

@@ -30,6 +30,6 @@ public:
     void visitForLoop(ForLoop& node);
     void visitWhileLoop(WhileLoop& node);
     void visitPrototypeFunction(PrototypeFunction& node);
-    void visitFunction(Function& node);
+    void visitFunction(FunctionNode& node);
     void visitReturn(Return& node);
 };
