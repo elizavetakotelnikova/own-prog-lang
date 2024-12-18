@@ -26,6 +26,8 @@ public:
 class CodeGenContext {
 private:
     std::list<std::unique_ptr<CodeGenBlock>> blocks;
+    GCManager gcManager;
+
 public:
     llvm::LLVMContext llvmContext; 
     std::unique_ptr<llvm::Module> module; 
@@ -57,4 +59,8 @@ public:
 
     void generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList);
     llvm::GenericValue runCode();
+
+    GCManager& getGCManager() {
+        return gcManager;
+    }
 };

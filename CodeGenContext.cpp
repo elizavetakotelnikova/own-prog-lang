@@ -17,10 +17,14 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
 
     for (const auto &node : nodeList)
     {
+        gcManager.addObject(node.get());
+
         if (!node->codeGeneration(*this))
         {
             std::cerr << "Code generation failed for an AST node" << std::endl;
         }
+
+        gcManager.collectGarbage();
     }
     
     module->print(llvm::outs(), nullptr);
@@ -31,9 +35,15 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
 llvm::GenericValue CodeGenContext::runCode()
 {
     std::cout << "Running code...";
+
+    gcManager.collectGarbage();
+
     llvm::ExecutionEngine *ee = llvm::EngineBuilder(std::move(module)).create();
     std::vector<llvm::GenericValue> noargs;
     llvm::GenericValue v = ee->runFunction(mainFunction.get(), noargs);
+
+    gcManager.collectGarbage();
+
     std::cout << "Code was run";
     return v;
 }

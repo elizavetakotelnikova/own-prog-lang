@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Token.hpp"
+#include "GCManager.h"
 #include <vector>
 #include <sstream>
 #include <memory>
@@ -11,7 +12,7 @@
 class Visitor;
 class CodeGenContext;
 
-class ASTNode {
+class ASTNode : public GCObject {
 public:
     virtual ~ASTNode() = default;
     virtual void accept(Visitor& visitor) = 0;
@@ -19,6 +20,7 @@ public:
     bool isChecked = false;
 
     virtual llvm::Value* codeGeneration(CodeGenContext& context) = 0;
+    void traceReferences(std::function<void(GCObject*)> visitor) override {}
 };
 
 class Expression : public ASTNode {
@@ -140,6 +142,10 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (operand) visitor(operand.get());
+    }
 };
 
 class Binary : public Expression {
@@ -156,6 +162,11 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (leftOperand) visitor(leftOperand.get());
+        if (rightOperand) visitor(rightOperand.get());
+    }
 };
 
 class CallFunction : public Expression {
@@ -172,6 +183,12 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        for (auto& arg : functionArgs) {
+            if (arg) visitor(arg.get());
+        }
+    }
 };
 
 class ArrayAccess : public Expression {
@@ -189,6 +206,10 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (identifier) visitor(identifier.get());
+    }
 };
 
 class Assignment : public Expression {
@@ -205,6 +226,11 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (identifier) visitor(identifier.get());
+        if (value) visitor(value.get());
+    }
 };
 
 // --------------------------Statement-------------------------
@@ -222,6 +248,10 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (expression) visitor(expression.get());
+    }
 };
 
 class ArrayDeclaration : public Statement {
@@ -246,6 +276,13 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (identifier) visitor(identifier.get());
+        for (auto& initValue : initValues) {
+            if (initValue) visitor(initValue.get());
+        }
+    }
 };
 
 class VariableDeclaration : public Statement {
@@ -263,6 +300,11 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (identifier) visitor(identifier.get());
+        if (initValue) visitor(initValue.get());
+    }
 };
 
 class Print : public Statement {
@@ -277,6 +319,10 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (expr) visitor(expr.get());
+    }
 };
 
 class Block : public Statement {
@@ -292,6 +338,12 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        for (auto& stmt : statementList) {
+            if (stmt) visitor(stmt.get());
+        }
+    }
 };
 
 class Condition : public Statement {
@@ -308,6 +360,12 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (conditionExpr) visitor(conditionExpr.get());
+        if (ifBlock) visitor(ifBlock.get());
+        if (elseBlock) visitor(elseBlock.get());
+    }
 };
 
 class ForLoop : public Statement {
@@ -330,6 +388,13 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (initializer) visitor(initializer.get());
+        if (condition) visitor(condition.get());
+        if (update) visitor(update.get());
+        if (body) visitor(body.get());
+    }
 };
 
 class WhileLoop : public Statement {
@@ -346,6 +411,11 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (condition) visitor(condition.get());
+        if (body) visitor(body.get());
+    }
 };
 
 class PrototypeFunction : public Statement {
@@ -381,6 +451,11 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (proto) visitor(proto.get());
+        if (body) visitor(body.get());
+    }
 };
 
 class Return : public Statement {
@@ -395,4 +470,8 @@ public:
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
+
+    void traceReferences(std::function<void(GCObject*)> visitor) override {
+        if (expr) visitor(expr.get());
+    }
 };

@@ -54,5 +54,8 @@ int main(int argc, char *argv[]){
 	CodeGenContext context;
 	context.generateCode(std::move(nodeList));
 	context.runCode();
+
+	context.getGCManager().collectGarbage();
+
 	return 0;
 }
