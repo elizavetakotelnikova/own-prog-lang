@@ -111,7 +111,7 @@ void PrototypeFunction::accept(Visitor &visitor)
     visitor.visitPrototypeFunction(*this);
 }
 
-void Function::accept(Visitor &visitor)
+void FunctionNode::accept(Visitor &visitor)
 {
     visitor.visitFunction(*this);
 }

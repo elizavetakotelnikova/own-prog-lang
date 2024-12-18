@@ -79,7 +79,7 @@ void Lexer::scanChar()
 {
     char value = getCharacter();
     if (currentCharacter() != '\''){
-        throw std::runtime_error("missing terminating \' character");
+        std::cerr << "missing terminating \' character";
     }
     getCharacter(); // Consume next '
     tokenList.push_back(Token(CHARACTER, std::string(1, value)));
@@ -90,14 +90,14 @@ void Lexer::scanString()
     while (currentCharacter() != '"' && !isEndOfText())
     {
         if (currentCharacter() == '\n'){
-            throw std::runtime_error("missing terminating \" character");
+            std::cerr << "missing terminating \" character";
         }
         getCharacter();
     }
 
     if (isEndOfText()) 
     {
-        throw std::runtime_error("missing terminating \" character");
+        std::cerr << "missing terminating \" character";
     }
 
     getCharacter(); // Consume next "

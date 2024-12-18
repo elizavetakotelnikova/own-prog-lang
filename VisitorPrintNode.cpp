@@ -179,7 +179,7 @@ void VisitorPrintNode::visitPrototypeFunction(PrototypeFunction &node)
     }
 }
 
-void VisitorPrintNode::visitFunction(Function &node)
+void VisitorPrintNode::visitFunction(FunctionNode &node)
 {
     node.isChecked = true;
     out << "Create " << node.toString() << endl;

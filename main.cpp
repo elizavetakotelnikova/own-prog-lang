@@ -5,7 +5,7 @@
 #include "include/Lexer.h"
 #include "include/Parser.h"
 #include "include/CodeGenContext.h"
-#include "OwnProgLangJIT.h"
+#include "include/OwnProgLangJIT.h"
 
 int main(int argc, char *argv[]){
     std::ifstream inputFile(argv[1]);
@@ -41,9 +41,9 @@ int main(int argc, char *argv[]){
 		if (!node->isChecked){
 			node->accept(visitor);
 
-			auto *FuncNode = dynamic_cast<Function *>(node.get());
+			auto *FuncNode = dynamic_cast<FunctionNode *>(node.get());
 			if (FuncNode) {
-				if (auto Err = JIT->addAST(std::make_unique<FunctionAST>(FuncNode))) {
+				if (auto Err = JIT->addAST(std::make_unique<FunctionNode>(FuncNode))) {
 					llvm::errs() << "Error adding AST to JIT: " << llvm::toString(std::move(Err)) << "\n";
 					return 1;
 				}

@@ -16,100 +16,107 @@
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "AST.h"
+#include "CodeGenContext.h"
 #include <memory>
 
-namespace llvm
-{
-	namespace orc
-	{
+namespace llvm {
+    namespace orc {
+        class OwnProgLangASTLayer;
+        class OwnProgLangASTMaterializationUnit;
 
-		class OwnProgLangASTMaterializationUnit : public MaterializationUnit
-		{
-		public:
-			OwnProgLangASTMaterializationUnit::OwnProgLangASTMaterializationUnit(OwnProgLangASTLayer &L, std::unique_ptr<Function> F) : MaterializationUnit(L.getInterface(*F)), L(L), F(std::move(F)) {}
+        class OwnProgLangASTMaterializationUnit : public MaterializationUnit {
+        public:
+            OwnProgLangASTMaterializationUnit(OwnProgLangASTLayer &L, std::unique_ptr<FunctionNode> F);
 
-			StringRef getName() const override
-			{
-				return "OwnProgLangASTMaterializationUnit";
-			}
+            StringRef getName() const override {
+                return "OwnProgLangASTMaterializationUnit";
+            }
 
-			void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
+            void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
 
-		private:
-			OwnProgLangASTLayer &L;
-			std::unique_ptr<Function> F;
+        private:
+            OwnProgLangASTLayer &L;
+            std::unique_ptr<FunctionNode> F;
 
-			void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override
-			{
-				llvm_unreachable("OwnProgLang functions are not overridable");
-			}
-		};
+            void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override {
+                llvm_unreachable("OwnProgLang functions are not overridable");
+            }
+        };
 
-		class OwnProgLangASTLayer
-		{
-		public:
-			OwnProgLangASTLayer(IRLayer &BaseLayer, const DataLayout &DL) : BaseLayer(BaseLayer), DL(DL) {}
+        class OwnProgLangASTLayer {
+        public:
+            OwnProgLangASTLayer(IRLayer &BaseLayer, const DataLayout &DL) : BaseLayer(BaseLayer), DL(DL) {
+            }
 
-			Error add(ResourceTrackerSP RT, std::unique_ptr<Function> F);
+            Error add(ResourceTrackerSP RT, std::unique_ptr<FunctionNode> F);
 
-			void emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<Function> F);
+            void emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<FunctionNode> F);
 
-			MaterializationUnit::Interface getInterface(Function &F);
+            MaterializationUnit::Interface getInterface(FunctionNode &F);
 
-		private:
-			IRLayer &BaseLayer;
-			const DataLayout &DL;
-		};
+        private:
+            IRLayer &BaseLayer;
+            const DataLayout &DL;
+        };
 
-		class OwnProgLangJIT
-		{
-		private:
-			std::unique_ptr<ExecutionSession> ES;
-			std::unique_ptr<EPCIndirectionUtils> EPCIU;
-			RTDyldObjectLinkingLayer ObjectLayer;
-			IRCompileLayer CompileLayer;
-			IRTransformLayer TransformLayer;
-			OwnProgLangASTLayer ASTLayer;
+        OwnProgLangASTMaterializationUnit::OwnProgLangASTMaterializationUnit(
+            OwnProgLangASTLayer &L, std::unique_ptr<FunctionNode> F) : MaterializationUnit(L.getInterface(*F)), L(L), F(std::move(F)) {
+        }
 
-			DataLayout DL;
-			MangleAndInterner Mangle;
-			ThreadSafeContext Ctx;
+        class OwnProgLangJIT {
+        private:
+            std::unique_ptr<ExecutionSession> ES;
+            std::unique_ptr<EPCIndirectionUtils> EPCIU;
+            RTDyldObjectLinkingLayer ObjectLayer;
+            IRCompileLayer CompileLayer;
+            IRTransformLayer TransformLayer;
+            OwnProgLangASTLayer ASTLayer;
 
-			JITDylib &MainJD;
+            DataLayout DL;
+            MangleAndInterner Mangle;
+            ThreadSafeContext Ctx;
 
-			static void handleLazyCallThroughError()
-			{
-				errs() << "LazyCallThrough error: Could not find function body";
-				exit(1);
-			}
+            JITDylib &MainJD;
 
-		public:
-			OwnProgLangJIT(std::unique_ptr<ExecutionSession> ES, std::unique_ptr<EPCIndirectionUtils> EPCIU, JITTargetMachineBuilder JTMB, DataLayout DL)
-				: ES(std::move(ES)), EPCIU(std::move(EPCIU)), DL(std::move(DL)), Mangle(*this->ES, this->DL),
-				  ObjectLayer(*this->ES, []()
-							  { return std::make_unique<SectionMemoryManager>(); }),
-				  CompileLayer(*this->ES, ObjectLayer, std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
-				  TransformLayer(*this->ES, CompileLayer, optimizeModule),
-				  ASTLayer(TransformLayer, this->DL),
-				  MainJD(this->ES->createBareJITDylib("<main>"))
-			{
-				MainJD.addGenerator(cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
-			}
-			static Expected<std::unique_ptr<OwnProgLangJIT>> Create();
-			Error addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nullptr);
-			Error addAST(std::unique_ptr<Function> F, ResourceTrackerSP RT = nullptr);
-			llvm::Expected<llvm::JITEvaluatedSymbol> lookup(llvm::StringRef Name);
-			const llvm::DataLayout &getDataLayout() const { return DL; }
-			JITDylib &getMainJITDylib() { return MainJD; }
+            static void handleLazyCallThroughError() {
+                errs() << "LazyCallThrough error: Could not find function body";
+                exit(1);
+            }
 
-		private:
-			static Expected<ThreadSafeModule> optimizeModule(ThreadSafeModule TSM, const MaterializationResponsibility &R);
-		};
-	}
+        public:
+            OwnProgLangJIT(std::unique_ptr<ExecutionSession> ES, std::unique_ptr<EPCIndirectionUtils> EPCIU,
+                           JITTargetMachineBuilder JTMB, DataLayout DL)
+                : ES(std::move(ES)), EPCIU(std::move(EPCIU)), DL(std::move(DL)), Mangle(*this->ES, this->DL),
+                  ObjectLayer(*this->ES, []() { return std::make_unique<SectionMemoryManager>(); }),
+                  CompileLayer(*this->ES, ObjectLayer, std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
+                  TransformLayer(*this->ES, CompileLayer, optimizeModule),
+                  ASTLayer(TransformLayer, this->DL),
+                  MainJD(this->ES->createBareJITDylib("<main>")) {
+                MainJD.addGenerator(
+                    cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
+            }
+
+            static Expected<std::unique_ptr<OwnProgLangJIT> > Create();
+
+            Error addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nullptr);
+
+            Error addAST(std::unique_ptr<FunctionNode> F, ResourceTrackerSP RT = nullptr);
+
+            llvm::Expected<llvm::orc::ExecutorSymbolDef>  lookup(llvm::StringRef Name);
+
+            const llvm::DataLayout &getDataLayout() const { return DL; }
+            JITDylib &getMainJITDylib() { return MainJD; }
+
+        private:
+            static Expected<ThreadSafeModule> optimizeModule(ThreadSafeModule TSM,
+                                                             const MaterializationResponsibility &R);
+        };
+    }
 }
 #endif

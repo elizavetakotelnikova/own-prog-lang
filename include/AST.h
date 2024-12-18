@@ -8,6 +8,8 @@
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Function.h>
+
 
 class Visitor;
 class CodeGenContext;
@@ -179,7 +181,7 @@ public:
     void accept(Visitor& visitor) override;
     std::string toString() override {
         std::stringstream s;
-        s << "Call Function with name: " << functionName;
+        s << "Call FunctionNode with name: " << functionName;
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
@@ -424,30 +426,30 @@ public:
     std::vector<std::pair<TokenType, std::string>> args;
     TokenType returnType;
 
-    PrototypeFunction(std::string name, std::vector<std::pair<TokenType, std::string>> args, TokenType retrunType) :
+    PrototypeFunction(std::string name, std::vector<std::pair<TokenType, std::string>> args, TokenType returnType) :
         name(name), args(args), returnType(returnType){}
 
     void accept(Visitor& visitor) override;
     std::string toString() override {
         std::stringstream s;
-        s << "Prototype Function with type " << returnType;
+        s << "Prototype FunctionNode with type " << returnType;
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
 };
 
-class Function : public Statement {
+class FunctionNode : public Statement {
 public:
     std::unique_ptr<PrototypeFunction> proto;
     std::unique_ptr<Block> body;
 
-    Function(std::unique_ptr<PrototypeFunction> proto, std::unique_ptr<Block> body) :
+    FunctionNode(std::unique_ptr<PrototypeFunction> proto, std::unique_ptr<Block> body) :
         proto(std::move(proto)), body(std::move(body)){}
 
     void accept(Visitor& visitor) override;
     std::string toString() override {
         std::stringstream s;
-        s << "Function";
+        s << "FunctionNode";
         return s.str();
     }
     llvm::Value* codeGeneration(CodeGenContext& context) override;
