@@ -35,7 +35,7 @@ llvm::Expected<std::unique_ptr<llvm::orc::OwnProgLangJIT>> llvm::orc::OwnProgLan
     if (!DL)
         return DL.takeError();
 
-    return std::make_unique<OwnProgLangJIT>(std::move(ES), std::move(JTMB),
+    return std::make_unique<OwnProgLangJIT>(std::move(ES), std::move(*EPCIU), std::move(JTMB),
                                            std::move(*DL));
 }
 
@@ -76,6 +76,11 @@ llvm::Expected<llvm::orc::ThreadSafeModule> llvm::orc::OwnProgLangJIT::optimizeM
 void llvm::orc::OwnProgLangASTMaterializationUnit::materialize(std::unique_ptr<MaterializationResponsibility> R) {
     L.emit(std::move(R), std::move(F));
 }
+
+llvm::orc::OwnProgLangASTMaterializationUnit::OwnProgLangASTMaterializationUnit(
+    llvm::orc::OwnProgLangASTLayer &L, std::unique_ptr<FunctionNode> F) : MaterializationUnit(L.getInterface(*F)), L(L), F(std::move(F)) {
+}
+
 
 void llvm::orc::OwnProgLangASTLayer::emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<FunctionNode> F) {
     BaseLayer.emit(std::move(MR), irgenAndTakeOwnership(*F, ""));

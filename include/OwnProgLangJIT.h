@@ -65,10 +65,6 @@ namespace llvm {
             const DataLayout &DL;
         };
 
-        OwnProgLangASTMaterializationUnit::OwnProgLangASTMaterializationUnit(
-            OwnProgLangASTLayer &L, std::unique_ptr<FunctionNode> F) : MaterializationUnit(L.getInterface(*F)), L(L), F(std::move(F)) {
-        }
-
         class OwnProgLangJIT {
         private:
             std::unique_ptr<ExecutionSession> ES;
