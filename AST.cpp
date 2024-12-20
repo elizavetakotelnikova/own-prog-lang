@@ -44,6 +44,7 @@ llvm::Value *CharLiteral::codeGeneration(CodeGenContext &context)
 
 llvm::Value *Identifier::codeGeneration(CodeGenContext &context)
 {
+    std::cout << "Identifier AST" << "\n";
     auto locals = context.locals();
     if (locals.find(value) == locals.end())
     {
@@ -51,7 +52,10 @@ llvm::Value *Identifier::codeGeneration(CodeGenContext &context)
         return nullptr;
     }
 
-    return new llvm::LoadInst(locals[value]->getType(), locals[value], value, false, context.currentBlock().get());
+    std::cout << "Found variable " << value << "\n";
+    llvm::Type *type = locals[value]->getType();
+    type->dump();
+    return locals[value];
 }
 
 llvm::Value *Unary::codeGeneration(CodeGenContext &context)
@@ -241,18 +245,23 @@ llvm::Value *VariableDeclaration::codeGeneration(CodeGenContext &context)
     {
     case TokenType::INT:
         llvmType = llvm::Type::getInt32Ty(context.llvmContext);
+        std::cout << "Assigned type - int32" << "\n";
         break;
     case TokenType::FLOAT:
         llvmType = llvm::Type::getFloatTy(context.llvmContext);
+            std::cout << "Assigned type - float" << "\n";
         break;
     case TokenType::CHAR:
         llvmType = llvm::Type::getInt8Ty(context.llvmContext);
+            std::cout << "Assigned type - char" << "\n";
         break;
     case TokenType::STR:
         llvmType = llvm::PointerType::getInt8Ty(context.llvmContext);
+            std::cout << "Assigned type - str" << "\n";
         break;
     case TokenType::BOOL:
         llvmType = llvm::Type::getInt1Ty(context.llvmContext);
+            std::cout << "Assigned type - boolean" << "\n";
         break;
     }
 
@@ -291,7 +300,10 @@ llvm::Value *VariableDeclaration::codeGeneration(CodeGenContext &context)
 
         context.builder.CreateStore(initVal, allocaInst);
     }
+
     context.locals()[identifier->value] = allocaInst;
+    std::cout << "AllocatedInst type: ";
+    allocaInst->getType()->dump();
     return allocaInst;
 }
 
@@ -329,12 +341,14 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
 
 llvm::Value *Print::codeGeneration(CodeGenContext &context)
 {
+    std::cout << "Expression in Print AST node: " << expr->toString() << "\n";
     llvm::Value *value = expr->codeGeneration(context);
     if (!value)
     {
         return nullptr;
     }
-
+    std::cout << "Value: ";
+    value->getType()->dump();
     llvm::Type *valueType = value->getType();
     llvm::FunctionType *printfType = llvm::FunctionType::get(
         context.builder.getInt32Ty(),
@@ -344,28 +358,33 @@ llvm::Value *Print::codeGeneration(CodeGenContext &context)
     llvm::FunctionCallee printfFunc = context.module->getOrInsertFunction("printf", printfType);
 
     llvm::Value *formatStr = nullptr;
-    if (valueType->isIntegerTy(32))
-    {
-        formatStr = context.builder.CreateGlobalStringPtr("%d\n", "formatStr");
-    }
-    else if (valueType->isFloatingPointTy())
-    {
-        formatStr = context.builder.CreateGlobalStringPtr("%f\n", "formatStr");
-    }
-    else if (valueType->isIntegerTy(1))
-    {
-        formatStr = context.builder.CreateGlobalStringPtr("%d\n", "formatStr");
-    }
-    else if (valueType->isIntegerTy(8))
-    {
-        formatStr = context.builder.CreateGlobalStringPtr("%c\n", "formatStr");
-    }
-    else if (valueType->isPointerTy())
-    {
-        formatStr = context.builder.CreateGlobalStringPtr("%s\n", "formatStr");
+    if (llvm::PointerType *pointerType = llvm::dyn_cast<llvm::PointerType>(valueType)) {
+        if (pointerType->isIntegerTy(32))
+        {
+            std::cout << "Integer" << "\n";
+            formatStr = context.builder.CreateGlobalStringPtr("%d\n", "formatStr");
+        }
+        else if (pointerType->isFloatingPointTy())
+        {
+            formatStr = context.builder.CreateGlobalStringPtr("%f\n", "formatStr");
+        }
+        else if (pointerType->isIntegerTy(1))
+        {
+            formatStr = context.builder.CreateGlobalStringPtr("%d\n", "formatStr");
+        }
+        else if (pointerType->isIntegerTy(8))
+        {
+            formatStr = context.builder.CreateGlobalStringPtr("%c\n", "formatStr");
+        }
+        else
+        {
+            std::cout << "Only ptr" << "\n";
+            formatStr = context.builder.CreateGlobalStringPtr("%s\n", "formatStr");
+        }
     }
     else
     {
+        std::cout << "Nullptr" << "\n";
         return nullptr;
     }
 

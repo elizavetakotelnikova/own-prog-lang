@@ -53,6 +53,7 @@ unique_ptr<Token> Parser::consumeToken(TokenType type, string errorMessage)
         return getToken();
     }
     std::cerr << errorMessage;
+    return nullptr;
 }
 
 unique_ptr<Statement> Parser::statement()
