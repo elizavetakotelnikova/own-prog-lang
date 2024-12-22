@@ -428,13 +428,9 @@ unique_ptr<Expression> Parser::identifier()
         string identifierName = previousToken()->value;
         auto identifier = make_unique<Identifier>(identifierName);
         getToken();
-        if (currentToken()->type != NUMBER_INT){
-            std::cerr << "index must be an int number";
-        }
-        int index = stoi(getToken()->value);
-        if (index < 0) std::cerr << "index must be positive";
+        auto index = expression();
         consumeToken(RIGHT_SQUARE, "expect a ']'");
-        return make_unique<ArrayAccess>(std::move(identifier), index);
+        return make_unique<ArrayAccess>(std::move(identifier), std::move(index));
     } 
     else { 
         return make_unique<Identifier>(previousToken()->value); // Just a variable

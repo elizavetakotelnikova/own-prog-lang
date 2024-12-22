@@ -4,7 +4,7 @@
 
 llvm::Value *IntegerLiteral::codeGeneration(CodeGenContext &context)
 {
-    return llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.llvmContext), value);
+    return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context.llvmContext), value);
 }
 
 llvm::Value *FloatLiteral::codeGeneration(CodeGenContext &context)
@@ -232,8 +232,7 @@ llvm::Value *ArrayAccess::codeGeneration(CodeGenContext &context)
     }
 
     llvm::Type *elementType = arrayType->getArrayElementType();
-
-    llvm::Value *indexValue = context.builder.getInt32(index);
+    llvm::Value *indexValue = index->codeGeneration(context);
     llvm::Value *elementPtr = context.builder.CreateInBoundsGEP(
         arrayType,
         arrayPtr,

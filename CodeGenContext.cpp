@@ -37,10 +37,8 @@ llvm::GenericValue CodeGenContext::runCode()
         return llvm::GenericValue();
     }
 
-    std::string errorMsg;
-    llvm::raw_string_ostream errorStream(errorMsg);
-    if (llvm::verifyModule(*module, &errorStream)) {
-        std::cerr << "Module verification failed: " << errorStream.str() << std::endl;
+    if (llvm::verifyModule(*module, &llvm::errs())) {
+        std::cerr << "Module verification failed." << std::endl;
         return llvm::GenericValue();
     }
 

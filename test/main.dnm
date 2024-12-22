@@ -1,1 +1,4 @@
-int a = 4;
+array int a[5] = {2, 3, 4, 3, 6};
+for (int i = 0; i < 5; i = i + 1){
+    print(a[i]);
+}

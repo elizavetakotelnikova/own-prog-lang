@@ -212,10 +212,10 @@ public:
 class ArrayAccess : public Expression {
 public:
     std::unique_ptr<Identifier> identifier;
-    int index;
+    std::unique_ptr<Expression> index;
 
-    ArrayAccess(std::unique_ptr<Identifier> identifier, int index):
-        identifier(std::move(identifier)), index(index){};
+    ArrayAccess(std::unique_ptr<Identifier> identifier, std::unique_ptr<Expression> index):
+        identifier(std::move(identifier)), index(std::move(index)){};
 
     void accept(Visitor& visitor) override;
     std::string toString() override {

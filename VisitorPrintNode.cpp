@@ -87,7 +87,7 @@ void VisitorPrintNode::visitArrayAccess(ArrayAccess &node)
     node.isChecked = true;
     out << "Create " << node.toString() << endl;
     node.identifier->accept(*this);
-    out << "Index: " << node.index << endl;
+    node.index->accept(*this);
 }
 
 void VisitorPrintNode::visitAssignment(Assignment &node)
