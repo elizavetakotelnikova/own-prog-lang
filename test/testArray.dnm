@@ -1,0 +1,4 @@
+array int isPrime[5] = {1, 2, 3, 4, 5};
+for (int p = 0; p < 5; p = p + 1) {
+    print(isPrime[p]);
+}

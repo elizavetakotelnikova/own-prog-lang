@@ -224,7 +224,7 @@ llvm::Value *ArrayAccess::codeGeneration(CodeGenContext &context)
         return nullptr;
     }
 
-    llvm::Type *arrayType = arrayPtr->getType();
+    llvm::Type *arrayType = context.locals()[identifier->value].second;
     if (!arrayType->isArrayTy())
     {
         std::cerr << identifier->value << " is not an array." << std::endl;
