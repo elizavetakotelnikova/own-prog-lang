@@ -2,8 +2,8 @@ array int arr[1000] = {-62, -243, -430, -204, 12, 481, -260, 477, -136, 241, -29
 
 int n = 1000;
 int swap;
-for (int i = 0; i < n - 1; i++){
-    for (int j = 0; j < n - i - 1; j++){
+for (int i = 0; i < n - 1; i = i + 1){
+    for (int j = 0; j < n - i - 1; j = j + 1){
         if (arr[j] > arr[j + 1]){
             swap = arr[j];
             arr[j] = arr[j + 1];
@@ -12,6 +12,6 @@ for (int i = 0; i < n - 1; i++){
     }
 }
 
-for (int k = 0; k < n - 1; k++){
+for (int k = 0; k < n - 1; k = k + 1){
     print(arr[k]);
 }
