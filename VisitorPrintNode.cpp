@@ -190,8 +190,8 @@ void VisitorPrintNode::visitFunction(FunctionNode &node)
 {
     node.isChecked = true;
     out << "Create " << node.toString() << endl;
-    node.proto->accept(*this);
-    node.body->accept(*this);
+    node.prototype->accept(*this);
+    node.bodyBlock->accept(*this);
 }
 
 void VisitorPrintNode::visitReturn(Return &node)

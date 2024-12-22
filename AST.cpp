@@ -597,6 +597,7 @@ llvm::Value *WhileLoop::codeGeneration(CodeGenContext &context)
 
 llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
 {
+    std::cout << "Prototype AST node" << "\n";
     std::vector<llvm::Type *> argTypes(args.size());
     for (int i = 0; i < args.size(); i++)
     {
@@ -642,6 +643,8 @@ llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
         default:
             return nullptr;
     }
+
+    std::cout << "Function args types are chosen" << "\n";
     llvm::FunctionType *funcType = llvm::FunctionType::get(retType, argTypes, false);
     llvm::Function *func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, name, context.module.get());
 
@@ -654,7 +657,7 @@ llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
 
 llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
 {
-    llvm::Function* function = static_cast<llvm::Function*>(proto->codeGeneration(context));
+    llvm::Function* function = static_cast<llvm::Function*>(prototype->codeGeneration(context));
     if (!function) {
         std::cerr << "Failed to generate function prototype" << std::endl;
         return nullptr;
@@ -662,7 +665,6 @@ llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
 
     llvm::BasicBlock *block = llvm::BasicBlock::Create(context.llvmContext, "entry", function);
     context.builder.SetInsertPoint(block);
-
     context.pushBlock(std::unique_ptr<llvm::BasicBlock>(block));
 
     for (auto &arg : function->args())
@@ -674,10 +676,10 @@ llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
         context.locals()[arg.getName().str()] = {alloc, arg.getType()};
     }
 
-    if (proto->returnType == VOID) {
+    if (prototype->returnType == VOID) {
         context.builder.CreateRetVoid();
     } else {
-        if (llvm::Value *returnValue = body->codeGeneration(context)) {
+        if (llvm::Value *returnValue = bodyBlock->codeGeneration(context)) {
             context.builder.CreateRet(returnValue);
         } else {
             function->eraseFromParent();
