@@ -1,16 +1,16 @@
-array bool isPrime[10000] = {true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true};
+array bool isPrime[100001] = {true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true};
 isPrime[0] = false;
 isPrime[1] = false;
 
-for (int p = 2; p * p <= 1000; p = p + 1) {
+for (int p = 2; p * p <= 100000; p = p + 1) {
     if (isPrime[p]) {  
-        for (int i = p * p; i <= 10000; i = i + p) {
+        for (int i = p * p; i <= 100000; i = i + p) {
             isPrime[i] = false;  
         }  
     }  
 }  
 
-for (int p = 2; p <= 1000; p = p + 1) {
+for (int p = 2; p <= 100000; p = p + 1) {
     if (isPrime[p]) {  
         print(p); 
     }  
