@@ -15,20 +15,18 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
 
     pushBlock(std::unique_ptr<llvm::BasicBlock>(entry));
 
+    int i = 0;
     for (const auto &node : nodeList)
     {
-        gcManager.addObject(node.get());
-
         if (!node->codeGeneration(*this))
         {
-            std::cerr << "Code generation failed for an AST node" << std::endl;
+            std::cerr << "Code generation failed for AST node No." << i << std::endl;
         }
-
-        gcManager.collectGarbage();
+        i++;
     }
     
-    module->print(llvm::outs(), nullptr);
     builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(llvmContext), 0));
+    module->print(llvm::outs(), nullptr);
     popBlock();
 }
 

@@ -1,34 +1,5 @@
-int x = 9;
-if (a == 3){
-    print(a);
-} else {
-    print(x);
-}
 
-array int arr[5] = {4, 3.3 , 9, true};
+int a = 4;
 
-int x = r;
 
-int b = x[3];
-
-int a;
-
-for (int i = 0; i < n ; i = i + 1){
-    while (true) {
-        print (3);
-        x = 6;
-    }
-}
-{
-    x = func(3.4, 2);
-    y = x(2,3);
-}
-
-function doSth(int a, float b) -> void {
-    print(a + b);
-    return 2;
-}
-
-function abc()-> int {
-    return 2;
-}
+int b = 4;

@@ -18,6 +18,7 @@ public:
     void visitIdentifier(Identifier& node);
     void visitUnary(Unary& node);
     void visitBinary(Binary& node);
+    void visitComparison(Comparison& node);
     void visitCallFunction(CallFunction& node);
     void visitArrayAccess(ArrayAccess& node);
     void visitAssignment(Assignment& node);

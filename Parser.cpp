@@ -270,8 +270,8 @@ unique_ptr<Expression> Parser::assignment()
         if (value == nullptr){
             std::cerr << "expect primary expression";
         }
-        if (dynamic_cast<Identifier*>(expr.get()) != nullptr) {
-            return std::make_unique<Assignment>(std::move(expr), std::move(value));
+        if (typeid(*expr) == typeid(Identifier) || typeid(*expr) == typeid(ArrayAccess)){
+            return make_unique<Assignment>(move(expr), move(value));
         }
         std::cerr << "Invalid assignment target";
     }
@@ -338,7 +338,7 @@ unique_ptr<Expression> Parser::equality(){
     while (matchToken({EQUAL_EQUAL, NOT_EQUAL})){
         Token _operator = *previousToken();
         auto right = comparison();
-        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
+        expr = make_unique<Comparison>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }
@@ -348,7 +348,7 @@ unique_ptr<Expression> Parser::comparison(){
     while (matchToken({GREATER, GREATER_EQUAL, LESS, LESS_EQUAL})){
         Token _operator = *previousToken();
         auto right = term();
-        expr = make_unique<Binary>(_operator, std::move(expr), std::move(right));
+        expr = make_unique<Comparison>(_operator, std::move(expr), std::move(right));
     }
     return expr;
 }

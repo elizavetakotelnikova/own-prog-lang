@@ -66,6 +66,13 @@ void VisitorPrintNode::visitBinary(Binary &node)
     node.rightOperand->accept(*this);
 }
 
+void VisitorPrintNode::visitComparison(Comparison &node){
+    node.isChecked = true;
+    out << "Create " << node.toString() << endl;
+    node.leftOperand->accept(*this);
+    node.rightOperand->accept(*this);
+}
+
 void VisitorPrintNode::visitCallFunction(CallFunction &node)
 {
     node.isChecked = true;

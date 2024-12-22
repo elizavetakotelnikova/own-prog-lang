@@ -14,6 +14,7 @@ public:
     virtual void visitIdentifier(Identifier& node) = 0;
     virtual void visitUnary(Unary& node) = 0;
     virtual void visitBinary(Binary& node) = 0;
+    virtual void visitComparison(Comparison& node) = 0;
     virtual void visitCallFunction(CallFunction& node) = 0;
     virtual void visitArrayAccess(ArrayAccess& node) = 0;
     virtual void visitAssignment(Assignment& node) = 0;

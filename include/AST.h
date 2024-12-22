@@ -171,6 +171,22 @@ public:
     }
 };
 
+class Comparison : public Expression {
+public:
+    Token _operator;
+    std::unique_ptr<Expression> leftOperand, rightOperand;
+
+    Comparison(Token _operator, std::unique_ptr<Expression> leftOperand, std::unique_ptr<Expression> rightOperand) :
+        _operator(_operator), leftOperand(std::move(leftOperand)), rightOperand(std::move(rightOperand)){};
+    void accept(Visitor& visitor) override;
+    std::string toString() override {
+        std::stringstream s;
+        s << "Comparison Operator: " << _operator.value;
+        return s.str();
+    }
+    llvm::Value* codeGeneration(CodeGenContext& context) override;
+};
+
 class CallFunction : public Expression {
 public:
     std::string functionName;

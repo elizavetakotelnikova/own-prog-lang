@@ -51,6 +51,11 @@ void Binary::accept(Visitor &visitor)
     visitor.visitBinary(*this);
 }
 
+void Comparison::accept(Visitor &visitor)
+{
+    visitor.visitComparison(*this);
+}
+
 void CallFunction::accept(Visitor &visitor)
 {
     visitor.visitCallFunction(*this);

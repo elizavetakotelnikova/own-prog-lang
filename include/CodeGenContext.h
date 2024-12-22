@@ -17,7 +17,7 @@
 class CodeGenBlock {
 public:
     std::unique_ptr<llvm::BasicBlock> block;
-    std::map<std::string, llvm::Value*> locals;
+    std::map<std::string, std::pair<llvm::Value*, llvm::Type*>> locals;
 
     CodeGenBlock(std::unique_ptr<llvm::BasicBlock> block) : 
         block(std::move(block)){}
@@ -25,10 +25,10 @@ public:
 
 class CodeGenContext {
 private:
-    std::list<std::unique_ptr<CodeGenBlock>> blocks;
     GCManager gcManager;
 
 public:
+    std::list<std::unique_ptr<CodeGenBlock>> blocks;
     llvm::LLVMContext llvmContext; 
     std::unique_ptr<llvm::Module> module; 
     llvm::IRBuilder<> builder; 
@@ -42,7 +42,7 @@ public:
         module = std::make_unique<llvm::Module>("main", llvmContext);
     }
 
-    std::map<std::string, llvm::Value*>& locals(){
+    std::map<std::string, std::pair<llvm::Value*, llvm::Type*>>& locals(){
         return blocks.back()->locals;
     }
     std::unique_ptr<llvm::BasicBlock> currentBlock(){
