@@ -1,2 +1,7 @@
-int a = 3;
-print(a);
+for (int p = 2; p <= 5; p = p + 1) {  
+    if (p == 3){ 
+        for (int i = p * p; i <= 5; i = i + p) {  
+            print(i);  
+        }  
+    }
+}  

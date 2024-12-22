@@ -65,7 +65,6 @@ llvm::Value *Identifier::codeGeneration(CodeGenContext &context)
     return nullptr;
 }
 
-
 llvm::Value *Unary::codeGeneration(CodeGenContext &context)
 {
     llvm::Value *operandValue = operand->codeGeneration(context);
@@ -142,7 +141,6 @@ llvm::Value *Binary::codeGeneration(CodeGenContext &context)
     return context.builder.CreateBinOp(instr, leftValue, rightValue, "mathtmp");
 }
 
-
 llvm::Value *Comparison::codeGeneration(CodeGenContext &context)
 {
     llvm::Value *leftValue = leftOperand->codeGeneration(context);
@@ -198,11 +196,11 @@ llvm::Value *CallFunction::codeGeneration(CodeGenContext &context)
     llvm::Function *CalleeF = context.module->getFunction(functionName);
     if (!CalleeF)
         std::cerr << "Unknown function referenced" << std::endl;
-        return nullptr;
+    return nullptr;
 
     if (CalleeF->arg_size() != functionArgs.size())
         std::cerr << "Missing arguments" << std::endl;
-        return nullptr;
+    return nullptr;
 
     std::vector<llvm::Value *> ArgsV;
     for (auto &arg : functionArgs)
@@ -307,19 +305,19 @@ llvm::Value *VariableDeclaration::codeGeneration(CodeGenContext &context)
         break;
     case TokenType::FLOAT:
         varType = llvm::Type::getFloatTy(context.llvmContext);
-            std::cout << "Assigned type - float" << "\n";
+        std::cout << "Assigned type - float" << "\n";
         break;
     case TokenType::CHAR:
         varType = llvm::Type::getInt8Ty(context.llvmContext);
-            std::cout << "Assigned type - char" << "\n";
+        std::cout << "Assigned type - char" << "\n";
         break;
     case TokenType::STR:
         varType = llvm::PointerType::getInt8Ty(context.llvmContext);
-            std::cout << "Assigned type - str" << "\n";
+        std::cout << "Assigned type - str" << "\n";
         break;
     case TokenType::BOOL:
         varType = llvm::Type::getInt1Ty(context.llvmContext);
-            std::cout << "Assigned type - boolean" << "\n";
+        std::cout << "Assigned type - boolean" << "\n";
         break;
     }
 
@@ -371,45 +369,71 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
     if (typeid(*identifier) == typeid(Identifier))
     {
         identifierName = dynamic_cast<Identifier *>(identifier.get())->value;
-    }
-    std::cout << identifierName << std::endl;
-    auto local = context.locals();
-    auto it = local.find(identifierName);
-    if (it == local.end())
-    {
-        std::cerr << "Undefined: " << identifierName << std::endl;
-        return nullptr;
-    }
-    varPtr = it->second.first;
-    varType = it->second.second;
-
-    llvm::Value *exprValue = value->codeGeneration(context);
-
-    if (exprValue->getType() != varType)
-    {
-        if (varType->isIntegerTy() && exprValue->getType()->isIntegerTy())
+        auto local = context.locals();
+        auto it = local.find(identifierName);
+        if (it == local.end())
         {
-            exprValue = context.builder.CreateIntCast(exprValue, varType, true, "cast");
-        }
-        else if (varType->isFloatingPointTy() && exprValue->getType()->isIntegerTy())
-        {
-            exprValue = context.builder.CreateSIToFP(exprValue, varType, "int_to_float");
-        }
-        else if (varType->isIntegerTy() && exprValue->getType()->isFloatingPointTy())
-        {
-            exprValue = context.builder.CreateFPToSI(exprValue, varType, "float_to_int");
-        }
-        else
-        {
-            std::cerr << "Type mismatch in assignment" << std::endl;
+            std::cerr << "Undefined: " << identifierName << std::endl;
             return nullptr;
         }
+        varPtr = it->second.first;
+        varType = it->second.second;
+
+        llvm::Value *exprValue = value->codeGeneration(context);
+        context.builder.CreateStore(exprValue, varPtr);
+        return exprValue;
+    }
+    else if (typeid(*identifier) == typeid(ArrayAccess))
+    {
+        identifierName = dynamic_cast<ArrayAccess *>(identifier.get())->identifier->value;
+        auto local = context.locals();
+        auto it = local.find(identifierName);
+        if (it == local.end())
+        {
+            std::cerr << "Undefined: " << identifierName << std::endl;
+            return nullptr;
+        }
+        varPtr = it->second.first;
+        varType = it->second.second;
+
+        llvm::Value *indexValue = dynamic_cast<ArrayAccess *>(identifier.get())->index->codeGeneration(context);
+
+        llvm::Value *elementPtr = context.builder.CreateGEP(
+            varType, 
+            varPtr, 
+            {context.builder.getInt32(0), indexValue}, 
+            "elementPtr");
+
+        llvm::Value *exprValue = value->codeGeneration(context);
+        context.builder.CreateStore(exprValue, elementPtr);
+        
+
+        return exprValue;
     }
 
-    context.builder.CreateStore(exprValue, varPtr);
-    return exprValue;
-}
+    // if (exprValue->getType() != varType)
+    // {
+    //     if (varType->isIntegerTy() && exprValue->getType()->isIntegerTy())
+    //     {
+    //         exprValue = context.builder.CreateIntCast(exprValue, varType, true, "cast");
+    //     }
+    //     else if (varType->isFloatingPointTy() && exprValue->getType()->isIntegerTy())
+    //     {
+    //         exprValue = context.builder.CreateSIToFP(exprValue, varType, "int_to_float");
+    //     }
+    //     else if (varType->isIntegerTy() && exprValue->getType()->isFloatingPointTy())
+    //     {
+    //         exprValue = context.builder.CreateFPToSI(exprValue, varType, "float_to_int");
+    //     }
+    //     else
+    //     {
+    //         std::cerr << "Type mismatch in assignment" << std::endl;
+    //         return nullptr;
+    //     }
+    // }
 
+    return nullptr;
+}
 
 llvm::Value *Print::codeGeneration(CodeGenContext &context)
 {
@@ -558,7 +582,7 @@ llvm::Value *ForLoop::codeGeneration(CodeGenContext &context)
     context.builder.CreateBr(loopHeader);
     context.builder.SetInsertPoint(loopEnd);
 
-    return nullptr;
+    return condValue; // dump value;
 }
 
 llvm::Value *WhileLoop::codeGeneration(CodeGenContext &context)
@@ -600,47 +624,49 @@ llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
     std::vector<llvm::Type *> argTypes(args.size());
     for (int i = 0; i < args.size(); i++)
     {
-        switch (args[i].first){
-            case INT:
-                argTypes[i] = llvm::Type::getInt32Ty(context.llvmContext);
-                break;
-            case FLOAT:
-                argTypes[i] = llvm::Type::getFloatTy(context.llvmContext);
-                break;
-            case STR:
-                argTypes[i] = llvm::PointerType::getInt8Ty(context.llvmContext);
-                break;
-            case CHAR:
-                argTypes[i] = llvm::Type::getInt8Ty(context.llvmContext);
-                break;
-            case BOOL:
-                argTypes[i] = llvm::Type::getInt1Ty(context.llvmContext);
-                break;
+        switch (args[i].first)
+        {
+        case INT:
+            argTypes[i] = llvm::Type::getInt32Ty(context.llvmContext);
+            break;
+        case FLOAT:
+            argTypes[i] = llvm::Type::getFloatTy(context.llvmContext);
+            break;
+        case STR:
+            argTypes[i] = llvm::PointerType::getInt8Ty(context.llvmContext);
+            break;
+        case CHAR:
+            argTypes[i] = llvm::Type::getInt8Ty(context.llvmContext);
+            break;
+        case BOOL:
+            argTypes[i] = llvm::Type::getInt1Ty(context.llvmContext);
+            break;
         }
     }
 
     llvm::Type *retType = nullptr;
-    switch (returnType){
-        case INT:
-            retType = llvm::Type::getInt32Ty(context.llvmContext);
-            break;
-        case FLOAT:
-            retType = llvm::Type::getFloatTy(context.llvmContext);
-            break;
-        case STR:
-            retType = llvm::PointerType::getInt8Ty(context.llvmContext);
-            break;
-        case CHAR:
-            retType = llvm::Type::getInt8Ty(context.llvmContext);
-            break;
-        case BOOL:
-            retType = llvm::Type::getInt1Ty(context.llvmContext);
-            break;
-        case VOID:
-            retType = llvm::Type::getVoidTy(context.llvmContext);
-            break;
-        default:
-            return nullptr;
+    switch (returnType)
+    {
+    case INT:
+        retType = llvm::Type::getInt32Ty(context.llvmContext);
+        break;
+    case FLOAT:
+        retType = llvm::Type::getFloatTy(context.llvmContext);
+        break;
+    case STR:
+        retType = llvm::PointerType::getInt8Ty(context.llvmContext);
+        break;
+    case CHAR:
+        retType = llvm::Type::getInt8Ty(context.llvmContext);
+        break;
+    case BOOL:
+        retType = llvm::Type::getInt1Ty(context.llvmContext);
+        break;
+    case VOID:
+        retType = llvm::Type::getVoidTy(context.llvmContext);
+        break;
+    default:
+        return nullptr;
     }
     llvm::FunctionType *funcType = llvm::FunctionType::get(retType, argTypes, false);
     llvm::Function *func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, name, context.module.get());
@@ -654,8 +680,9 @@ llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
 
 llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
 {
-    llvm::Function* function = static_cast<llvm::Function*>(proto->codeGeneration(context));
-    if (!function) {
+    llvm::Function *function = static_cast<llvm::Function *>(proto->codeGeneration(context));
+    if (!function)
+    {
         std::cerr << "Failed to generate function prototype" << std::endl;
         return nullptr;
     }
@@ -667,19 +694,25 @@ llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
 
     for (auto &arg : function->args())
     {
-        llvm::AllocaInst* alloc = context.builder.CreateAlloca(arg.getType(), nullptr, arg.getName());
-        
+        llvm::AllocaInst *alloc = context.builder.CreateAlloca(arg.getType(), nullptr, arg.getName());
+
         context.builder.CreateStore(&arg, alloc);
 
         context.locals()[arg.getName().str()] = {alloc, arg.getType()};
     }
 
-    if (proto->returnType == VOID) {
+    if (proto->returnType == VOID)
+    {
         context.builder.CreateRetVoid();
-    } else {
-        if (llvm::Value *returnValue = body->codeGeneration(context)) {
+    }
+    else
+    {
+        if (llvm::Value *returnValue = body->codeGeneration(context))
+        {
             context.builder.CreateRet(returnValue);
-        } else {
+        }
+        else
+        {
             function->eraseFromParent();
             return nullptr;
         }
