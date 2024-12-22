@@ -194,24 +194,35 @@ llvm::Value *Comparison::codeGeneration(CodeGenContext &context)
 llvm::Value *CallFunction::codeGeneration(CodeGenContext &context)
 {
     llvm::Function *CalleeF = context.module->getFunction(functionName);
-    if (!CalleeF)
-        std::cerr << "Unknown function referenced" << "\n";
-    return nullptr;
-
-    if (CalleeF->arg_size() != functionArgs.size())
-        std::cerr << "Missing arguments" << "\n";
-    return nullptr;
-
-    std::vector<llvm::Value *> ArgsV;
-    for (auto &arg : functionArgs)
-    {
-        ArgsV.push_back(arg->codeGeneration(context));
-        if (!ArgsV.back())
-            return nullptr;
+    if (!CalleeF) {
+        std::cerr << "Unknown function referenced: " << functionName << "\n";
+        return nullptr;
     }
 
-    return context.builder.CreateCall(CalleeF, ArgsV, "calltmp");
+    if (CalleeF->arg_size() != functionArgs.size()) {
+        std::cerr << "Incorrect number of arguments passed to function: " << functionName << "\n";
+        return nullptr;
+    }
+
+    std::vector<llvm::Value *> ArgsV;
+    for (auto &arg : functionArgs) {
+        llvm::Value *argValue = arg->codeGeneration(context);
+        if (!argValue) {
+            std::cerr << "Failed to generate code for argument in function call: " << functionName << "\n";
+            return nullptr;
+        }
+        ArgsV.push_back(argValue);
+    }
+
+    llvm::CallInst *callInst = context.builder.CreateCall(CalleeF, ArgsV);
+    if (CalleeF->getReturnType()->isVoidTy()) {
+        return callInst;
+    }
+
+    callInst->setName("calltmp");
+    return callInst;
 }
+
 
 llvm::Value *ArrayAccess::codeGeneration(CodeGenContext &context)
 {
@@ -703,18 +714,18 @@ llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
     }
 
 
+    llvm::Value *returnValue = bodyBlock->codeGeneration(context);
+    if (!returnValue && prototype->returnType != VOID) {
+        std::cerr << "Failed to generate function body" << "\n";
+        function->eraseFromParent();
+        return nullptr;
+    }
+
     if (prototype->returnType == VOID) {
         context.builder.CreateRetVoid();
-    } else {
-        if (llvm::Value *returnValue = bodyBlock->codeGeneration(context)) {
-            context.builder.CreateRet(returnValue);
-        }
-        else
-        {
-            function->eraseFromParent();
-            return nullptr;
-        }
-    }
+    } /*else if (returnValue) {
+        context.builder.CreateRet(returnValue); // return statement should generate return code
+    }*/
 
     llvm::verifyFunction(*function);
     return function;
@@ -725,12 +736,14 @@ llvm::Value *Return::codeGeneration(CodeGenContext &context)
     llvm::Value *returnValue = expr->codeGeneration(context);
     if (!returnValue)
     {
+        std::cerr << "Nothing to return" << "\n";
         return nullptr;
     }
 
     llvm::Function *currentFunction = context.builder.GetInsertBlock()->getParent();
     if (!currentFunction)
     {
+        std::cerr << "Not in a function" << "\n";
         return nullptr;
     }
 
@@ -742,5 +755,5 @@ llvm::Value *Return::codeGeneration(CodeGenContext &context)
 
     context.builder.CreateRet(returnValue);
 
-    return nullptr;
+    return returnValue;
 }

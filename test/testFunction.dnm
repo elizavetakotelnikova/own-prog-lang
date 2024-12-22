@@ -1,5 +1,5 @@
 function factorial(int n) -> int {
-    print(n);
+    return n;
 }
 
 print(factorial(10));

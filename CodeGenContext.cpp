@@ -16,10 +16,23 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
     int i = 0;
     for (const auto &node : nodeList)
     {
+        llvm::BasicBlock* prevInsertPoint = nullptr;
+        if (dynamic_cast<FunctionNode*>(node.get())) {
+            prevInsertPoint = builder.GetInsertBlock();
+        }
+
         if (!node->codeGeneration(*this))
         {
-            std::cerr << "Code generation failed for AST node No." << i << " " << node->toString() << "\n";
+            std::cout << "Code generation failed for AST node No." << i << " " << node->toString() << "\n";
         }
+        else {
+            std::cout << "Succeed for AST Node: " << node->toString() << "\n";
+        }
+
+        if (dynamic_cast<FunctionNode*>(node.get())) {
+            builder.SetInsertPoint(prevInsertPoint);
+        }
+
         i++;
     }
 
