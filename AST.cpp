@@ -538,7 +538,14 @@ llvm::Value *Condition::codeGeneration(CodeGenContext &context)
         std::cerr << "Failed to generate 'then' block." << "\n";
         return nullptr;
     }
-    context.builder.CreateBr(mergeBl);
+
+    if (!dynamic_cast<Return*>(ifBlock.get())) {
+        auto block = dynamic_cast<Block*>(ifBlock.get());
+        if (!block || !dynamic_cast<Return*>(block->statementList[0].get())) {
+            context.builder.CreateBr(mergeBl);
+        }
+    }
+
     thenBl = context.builder.GetInsertBlock();
 
     context.builder.SetInsertPoint(elseBl);
@@ -754,6 +761,5 @@ llvm::Value *Return::codeGeneration(CodeGenContext &context)
     }
 
     context.builder.CreateRet(returnValue);
-
     return returnValue;
 }
