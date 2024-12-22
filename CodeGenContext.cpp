@@ -12,9 +12,7 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
 
     llvm::BasicBlock *entry = llvm::BasicBlock::Create(llvmContext, "entry", mainFunction.get());
     builder.SetInsertPoint(entry);
-
     pushBlock(std::unique_ptr<llvm::BasicBlock>(entry));
-
     int i = 0;
     for (const auto &node : nodeList)
     {
@@ -24,24 +22,36 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
         }
         i++;
     }
-    
-    builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(llvmContext), 0));
+
+    std::cout << "Code generated for AST node succeed" << "\n";
+    builder.CreateRetVoid();
     module->print(llvm::outs(), nullptr);
-    popBlock();
 }
 
 llvm::GenericValue CodeGenContext::runCode()
 {
-    std::cout << "Running code...";
+    std::cout << "Running code..." << std::endl;
 
-    gcManager.collectGarbage();
+    if (!mainFunction) {
+        std::cerr << "Main function not set." << std::endl;
+        return llvm::GenericValue();
+    }
 
-    llvm::ExecutionEngine *ee = llvm::EngineBuilder(std::move(module)).create();
+    std::string errorMsg;
+    llvm::raw_string_ostream errorStream(errorMsg);
+    if (llvm::verifyModule(*module, &errorStream)) {
+        std::cerr << "Module verification failed: " << errorStream.str() << std::endl;
+        return llvm::GenericValue();
+    }
+
+    std::unique_ptr<llvm::ExecutionEngine> ee(llvm::EngineBuilder(std::move(module)).create());
+    if (!ee) {
+        std::cerr << "Failed to create ExecutionEngine." << std::endl;
+        return llvm::GenericValue();
+    }
+
     std::vector<llvm::GenericValue> noargs;
     llvm::GenericValue v = ee->runFunction(mainFunction.get(), noargs);
-
-    gcManager.collectGarbage();
-
-    std::cout << "Code was run";
+    std::cout << "Code was run." << std::endl;
     return v;
 }

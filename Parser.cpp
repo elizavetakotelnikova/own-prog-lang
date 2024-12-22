@@ -1,6 +1,5 @@
 #include "include/Parser.h"
 #include <string>
-#include <typeinfo>
 
 using namespace std;
 
@@ -271,7 +270,7 @@ unique_ptr<Expression> Parser::assignment()
             std::cerr << "expect primary expression";
         }
         if (typeid(*expr) == typeid(Identifier) || typeid(*expr) == typeid(ArrayAccess)){
-            return make_unique<Assignment>(move(expr), move(value));
+            return make_unique<Assignment>(std::move(expr), std::move(value));
         }
         std::cerr << "Invalid assignment target";
     }

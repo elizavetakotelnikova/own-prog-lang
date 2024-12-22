@@ -414,6 +414,7 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
 
 llvm::Value *Print::codeGeneration(CodeGenContext &context)
 {
+    std::cout << "Print AST Node" << "\n";
     llvm::Value *value = expr->codeGeneration(context);
     if (!value)
     {
