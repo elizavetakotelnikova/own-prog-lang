@@ -90,7 +90,7 @@ llvm::orc::MaterializationUnit::Interface llvm::orc::OwnProgLangASTLayer::getInt
     MangleAndInterner Mangle(BaseLayer.getExecutionSession(), DL);
     SymbolFlagsMap Symbols;
 
-    Symbols[Mangle(F.proto->name)] = JITSymbolFlags(JITSymbolFlags::Exported | JITSymbolFlags::Callable);
+    Symbols[Mangle(F.prototype->name)] = JITSymbolFlags(JITSymbolFlags::Exported | JITSymbolFlags::Callable);
     return MaterializationUnit::Interface(std::move(Symbols), nullptr);
 }
 

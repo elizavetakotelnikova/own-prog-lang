@@ -18,7 +18,7 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
     {
         if (!node->codeGeneration(*this))
         {
-            std::cerr << "Code generation failed for AST node No." << i << std::endl;
+            std::cerr << "Code generation failed for AST node No." << i << " " << node->toString() << "\n";
         }
         i++;
     }

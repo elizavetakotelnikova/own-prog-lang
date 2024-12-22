@@ -215,9 +215,10 @@ unique_ptr<Statement> Parser::function()
     auto proto = prototypeFunction();
     consumeToken(LEFT_BRACE, "expect a '{'");
     auto body = block();
-    return make_unique<FunctionNode>(
-        unique_ptr<PrototypeFunction>(static_cast<PrototypeFunction*>(proto.release())),
-        unique_ptr<Block>(static_cast<Block*>(body.release()))
+    auto baseProto = std::unique_ptr<PrototypeFunction>(dynamic_cast<PrototypeFunction*>(proto.release()));
+    auto baseBlock = std::unique_ptr<Block>(dynamic_cast<Block*>(body.release()));
+    return std::make_unique<FunctionNode>(
+        std::move(baseProto), std::move(baseBlock)
     );
 }
 

@@ -456,11 +456,11 @@ public:
 
 class FunctionNode : public Statement {
 public:
-    std::unique_ptr<PrototypeFunction> proto;
-    std::unique_ptr<Block> body;
+    std::unique_ptr<PrototypeFunction> prototype;
+    std::unique_ptr<Block> bodyBlock;
 
     FunctionNode(std::unique_ptr<PrototypeFunction> proto, std::unique_ptr<Block> body) :
-        proto(std::move(proto)), body(std::move(body)){}
+        prototype(std::move(proto)), bodyBlock(std::move(body)){}
 
     void accept(Visitor& visitor) override;
     std::string toString() override {
@@ -471,8 +471,8 @@ public:
     llvm::Value* codeGeneration(CodeGenContext& context) override;
 
     void traceReferences(std::function<void(GCObject*)> visitor) override {
-        if (proto) visitor(proto.get());
-        if (body) visitor(body.get());
+        if (prototype) visitor(prototype.get());
+        if (bodyBlock) visitor(bodyBlock.get());
     }
 };
 
