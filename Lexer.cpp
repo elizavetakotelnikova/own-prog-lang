@@ -3,7 +3,7 @@
 
 void Lexer::logError(std::string error)
 {
-    std::cerr << error << std::endl; 
+    std::cerr << error << "\n"; 
 }
 
 bool Lexer::isEndOfText()

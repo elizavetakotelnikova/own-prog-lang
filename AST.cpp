@@ -56,12 +56,12 @@ llvm::Value *Identifier::codeGeneration(CodeGenContext &context)
         llvm::Type *varType = it->second.second;
         if (!varPtr)
         {
-            std::cerr << "Null pointer for variable: " << value << std::endl;
+            std::cerr << "Null pointer for variable: " << value << "\n";
             return nullptr;
         }
         return context.builder.CreateLoad(varType, varPtr, value);
     }
-    std::cerr << "Undefined identifier: " << value << std::endl;
+    std::cerr << "Undefined identifier: " << value << "\n";
     return nullptr;
 }
 
@@ -79,12 +79,12 @@ llvm::Value *Unary::codeGeneration(CodeGenContext &context)
     case NOT:
         if (!operandValue->getType()->isIntegerTy())
         {
-            std::cerr << "Operand of NOT must be an integer type" << std::endl;
+            std::cerr << "Operand of NOT must be an integer type" << "\n";
             return nullptr;
         }
         return context.builder.CreateNot(operandValue, "not");
     default:
-        std::cerr << "Unknown unary operator" << std::endl;
+        std::cerr << "Unknown unary operator" << "\n";
         return nullptr;
     }
 }
@@ -109,7 +109,7 @@ llvm::Value *Binary::codeGeneration(CodeGenContext &context)
     bool isDoubleTy = rightValue->getType()->isFloatingPointTy();
     if (isDoubleTy && (_operator.type == LOGICAL_AND || _operator.type == LOGICAL_OR))
     {
-        std::cerr << "Binary operation (AND, OR) on floating point value is not supported" << std::endl;
+        std::cerr << "Binary operation (AND, OR) on floating point value is not supported" << "\n";
         return nullptr;
     }
 
@@ -135,7 +135,7 @@ llvm::Value *Binary::codeGeneration(CodeGenContext &context)
         instr = llvm::Instruction::Or;
         break;
     default:
-        std::cerr << "Unknown binary operator" << std::endl;
+        std::cerr << "Unknown binary operator" << "\n";
         return nullptr;
     }
     return context.builder.CreateBinOp(instr, leftValue, rightValue, "mathtmp");
@@ -182,7 +182,7 @@ llvm::Value *Comparison::codeGeneration(CodeGenContext &context)
         predicate = isDoubleTy ? llvm::CmpInst::FCMP_OGE : llvm::CmpInst::ICMP_SGE;
         break;
     default:
-        std::cerr << "Unknown comparison operator" << std::endl;
+        std::cerr << "Unknown comparison operator" << "\n";
         return nullptr;
     }
 
@@ -195,11 +195,11 @@ llvm::Value *CallFunction::codeGeneration(CodeGenContext &context)
 {
     llvm::Function *CalleeF = context.module->getFunction(functionName);
     if (!CalleeF)
-        std::cerr << "Unknown function referenced" << std::endl;
+        std::cerr << "Unknown function referenced" << "\n";
     return nullptr;
 
     if (CalleeF->arg_size() != functionArgs.size())
-        std::cerr << "Missing arguments" << std::endl;
+        std::cerr << "Missing arguments" << "\n";
     return nullptr;
 
     std::vector<llvm::Value *> ArgsV;
@@ -218,14 +218,14 @@ llvm::Value *ArrayAccess::codeGeneration(CodeGenContext &context)
     llvm::Value *arrayPtr = context.locals()[identifier->value].first;
     if (!arrayPtr)
     {
-        std::cerr << "Array " << identifier->value << " not declared." << std::endl;
+        std::cerr << "Array " << identifier->value << " not declared." << "\n";
         return nullptr;
     }
 
     llvm::Type *arrayType = context.locals()[identifier->value].second;
     if (!arrayType->isArrayTy())
     {
-        std::cerr << identifier->value << " is not an array." << std::endl;
+        std::cerr << identifier->value << " is not an array." << "\n";
         return nullptr;
     }
 
@@ -266,7 +266,7 @@ llvm::Value *ArrayDeclaration::codeGeneration(CodeGenContext &context)
         elementType = llvm::PointerType::getInt8Ty(context.llvmContext);
         break;
     default:
-        std::cerr << "Unsupported array type." << std::endl;
+        std::cerr << "Unsupported array type." << "\n";
         return nullptr;
     }
     llvm::ArrayType *arrayType = llvm::ArrayType::get(elementType, size);
@@ -323,7 +323,7 @@ llvm::Value *VariableDeclaration::codeGeneration(CodeGenContext &context)
 
     if (!varType)
     {
-        std::cerr << "Unsupported variable type" << std::endl;
+        std::cerr << "Unsupported variable type" << "\n";
         return nullptr;
     }
 
@@ -349,7 +349,7 @@ llvm::Value *VariableDeclaration::codeGeneration(CodeGenContext &context)
             }
             else
             {
-                std::cerr << "Type mismatch in variable initialization" << std::endl;
+                std::cerr << "Type mismatch in variable initialization" << "\n";
                 return nullptr;
             }
         }
@@ -373,7 +373,7 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
         auto it = local.find(identifierName);
         if (it == local.end())
         {
-            std::cerr << "Undefined: " << identifierName << std::endl;
+            std::cerr << "Undefined: " << identifierName << "\n";
             return nullptr;
         }
         varPtr = it->second.first;
@@ -390,7 +390,7 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
         auto it = local.find(identifierName);
         if (it == local.end())
         {
-            std::cerr << "Undefined: " << identifierName << std::endl;
+            std::cerr << "Undefined: " << identifierName << "\n";
             return nullptr;
         }
         varPtr = it->second.first;
@@ -427,7 +427,7 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
     //     }
     //     else
     //     {
-    //         std::cerr << "Type mismatch in assignment" << std::endl;
+    //         std::cerr << "Type mismatch in assignment" << "\n";
     //         return nullptr;
     //     }
     // }
@@ -501,7 +501,7 @@ llvm::Value *Condition::codeGeneration(CodeGenContext &context)
     llvm::Value *condition = conditionExpr->codeGeneration(context);
     if (!condition)
     {
-        std::cerr << "Failed to generate condition expression." << std::endl;
+        std::cerr << "Failed to generate condition expression." << "\n";
         return nullptr;
     }
 
@@ -524,7 +524,7 @@ llvm::Value *Condition::codeGeneration(CodeGenContext &context)
     llvm::Value *thenV = ifBlock->codeGeneration(context);
     if (!thenV)
     {
-        std::cerr << "Failed to generate 'then' block." << std::endl;
+        std::cerr << "Failed to generate 'then' block." << "\n";
         return nullptr;
     }
     context.builder.CreateBr(mergeBl);
@@ -534,7 +534,7 @@ llvm::Value *Condition::codeGeneration(CodeGenContext &context)
     llvm::Value *elseV = elseBlock ? elseBlock->codeGeneration(context) : nullptr;
     if (elseBlock && !elseV)
     {
-        std::cerr << "Failed to generate 'else' block." << std::endl;
+        std::cerr << "Failed to generate 'else' block." << "\n";
         return nullptr;
     }
     context.builder.CreateBr(mergeBl);
@@ -598,7 +598,7 @@ llvm::Value *WhileLoop::codeGeneration(CodeGenContext &context)
     llvm::Value *condValue = condition->codeGeneration(context);
     if (!condValue)
     {
-        std::cerr << "Failed to generate condition for while loop" << std::endl;
+        std::cerr << "Failed to generate condition for while loop" << "\n";
     }
 
     if (condValue->getType()->isIntegerTy() && condValue->getType()->getIntegerBitWidth() != 1)
@@ -607,7 +607,7 @@ llvm::Value *WhileLoop::codeGeneration(CodeGenContext &context)
     }
     else if (!condValue->getType()->isIntegerTy(1))
     {
-        std::cerr << "Condition of while loop must be boolean" << std::endl;
+        std::cerr << "Condition of while loop must be boolean" << "\n";
         return nullptr;
     }
 
@@ -685,7 +685,7 @@ llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
 {
     llvm::Function* function = static_cast<llvm::Function*>(prototype->codeGeneration(context));
     if (!function) {
-        std::cerr << "Failed to generate function prototype" << std::endl;
+        std::cerr << "Failed to generate function prototype" << "\n";
         return nullptr;
     }
 

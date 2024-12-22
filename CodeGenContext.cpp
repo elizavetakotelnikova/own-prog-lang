@@ -30,26 +30,26 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
 
 llvm::GenericValue CodeGenContext::runCode()
 {
-    std::cout << "Running code..." << std::endl;
+    std::cout << "Running code..." << "\n";
 
     if (!mainFunction) {
-        std::cerr << "Main function not set." << std::endl;
+        std::cerr << "Main function not set." << "\n";
         return llvm::GenericValue();
     }
 
     if (llvm::verifyModule(*module, &llvm::errs())) {
-        std::cerr << "Module verification failed." << std::endl;
+        std::cerr << "Module verification failed." << "\n";
         return llvm::GenericValue();
     }
 
     std::unique_ptr<llvm::ExecutionEngine> ee(llvm::EngineBuilder(std::move(module)).create());
     if (!ee) {
-        std::cerr << "Failed to create ExecutionEngine." << std::endl;
+        std::cerr << "Failed to create ExecutionEngine." << "\n";
         return llvm::GenericValue();
     }
 
     std::vector<llvm::GenericValue> noargs;
     llvm::GenericValue v = ee->runFunction(mainFunction.get(), noargs);
-    std::cout << "Code was run." << std::endl;
+    std::cout << "Code was run." << "\n";
     return v;
 }

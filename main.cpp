@@ -10,7 +10,7 @@
 int main(int argc, char *argv[]){
     std::ifstream inputFile(argv[1]);
 	if (!inputFile.is_open()){
-		std::cout << "Error opening file" << std::endl;
+		std::cout << "Error opening file" << "\n";
 		return 1;
 	}
     std::stringstream ss;
@@ -34,10 +34,10 @@ int main(int argc, char *argv[]){
 	parser.parse();
 	VisitorPrintNode visitor(std::cout);
 	auto nodeList = parser.getASTNodeList();
-	std::cout << "Node list size: " << nodeList.size() << std::endl;
+	std::cout << "Node list size: " << nodeList.size() << "\n";
 	i = 0;
 	for (auto &node : nodeList){
-		std::cout << "Node No." << i << " : " << std::endl;
+		std::cout << "Node No." << i << " : " << "\n";
 		if (!node->isChecked){
 			node->accept(visitor);
 
