@@ -16,11 +16,11 @@
 
 class CodeGenBlock {
 public:
-    std::unique_ptr<llvm::BasicBlock> block;
+    llvm::BasicBlock* block;
     std::map<std::string, std::pair<llvm::Value*, llvm::Type*>> locals;
 
-    CodeGenBlock(std::unique_ptr<llvm::BasicBlock> block) : 
-        block(std::move(block)){}
+    CodeGenBlock(llvm::BasicBlock* block) : 
+        block(block){}
 };
 
 class CodeGenContext {
@@ -28,7 +28,7 @@ private:
     GCManager gcManager;
 
 public:
-    std::list<std::unique_ptr<CodeGenBlock>> blocks;
+    std::list<CodeGenBlock*> blocks;
     llvm::LLVMContext llvmContext; 
     std::unique_ptr<llvm::Module> module; 
     llvm::IRBuilder<> builder; 
@@ -45,16 +45,18 @@ public:
     std::map<std::string, std::pair<llvm::Value*, llvm::Type*>>& locals(){
         return blocks.back()->locals;
     }
-    std::unique_ptr<llvm::BasicBlock> currentBlock(){
-        return std::move(blocks.back()->block);
+    llvm::BasicBlock* currentBlock(){
+        return blocks.back()->block;
     }
 
-    void pushBlock(std::unique_ptr<llvm::BasicBlock> block){
-        blocks.push_back(std::make_unique<CodeGenBlock>(std::move(block)));
+    void pushBlock(llvm::BasicBlock* block){
+        blocks.push_back(new CodeGenBlock(block));
     }
 
     void popBlock(){
-        blocks.pop_back();
+        CodeGenBlock *top = blocks.back(); 
+        blocks.pop_back(); 
+        delete top;
     }
 
     void generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList);

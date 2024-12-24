@@ -12,7 +12,7 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
 
     llvm::BasicBlock *entry = llvm::BasicBlock::Create(llvmContext, "entry", mainFunction.get());
     builder.SetInsertPoint(entry);
-    pushBlock(std::unique_ptr<llvm::BasicBlock>(entry));
+    pushBlock(entry);
     int i = 0;
     for (const auto &node : nodeList)
     {

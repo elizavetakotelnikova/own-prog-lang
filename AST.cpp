@@ -44,23 +44,20 @@ llvm::Value *CharLiteral::codeGeneration(CodeGenContext &context)
 
 llvm::Value *Identifier::codeGeneration(CodeGenContext &context)
 {
-    for (auto &block : context.blocks)
-    {
-        auto local = block->locals;
-        auto it = local.find(value);
-        if (it == local.end())
-        {
-            continue;
+    for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt) {
+        auto& locals = (*blockIt)->locals; 
+        auto it = locals.find(value);
+        if (it != locals.end()) {
+            llvm::Value *varPtr = it->second.first;
+            llvm::Type *varType = it->second.second;
+            if (!varPtr) {
+                std::cerr << "Null pointer for variable: " << value << "\n";
+                return nullptr;
+            }
+            return context.builder.CreateLoad(varType, varPtr, value);
         }
-        llvm::Value *varPtr = it->second.first;
-        llvm::Type *varType = it->second.second;
-        if (!varPtr)
-        {
-            std::cerr << "Null pointer for variable: " << value << "\n";
-            return nullptr;
-        }
-        return context.builder.CreateLoad(varType, varPtr, value);
     }
+
     std::cerr << "Undefined identifier: " << value << "\n";
     return nullptr;
 }
@@ -226,14 +223,24 @@ llvm::Value *CallFunction::codeGeneration(CodeGenContext &context)
 
 llvm::Value *ArrayAccess::codeGeneration(CodeGenContext &context)
 {
-    llvm::Value *arrayPtr = context.locals()[identifier->value].first;
+    llvm::Value* arrayPtr = nullptr;
+    llvm::Type* arrayType = nullptr;
+
+    for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt) {
+        auto& locals = (*blockIt)->locals;
+        auto it = locals.find(identifier->value);
+        if (it != locals.end()) {
+            arrayPtr = it->second.first;
+            arrayType = it->second.second;
+            break; 
+        }
+    }
     if (!arrayPtr)
     {
         std::cerr << "Array " << identifier->value << " not declared." << "\n";
         return nullptr;
     }
 
-    llvm::Type *arrayType = context.locals()[identifier->value].second;
     if (!arrayType->isArrayTy())
     {
         std::cerr << identifier->value << " is not an array." << "\n";
@@ -380,15 +387,20 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
     if (typeid(*identifier) == typeid(Identifier))
     {
         identifierName = dynamic_cast<Identifier *>(identifier.get())->value;
-        auto local = context.locals();
-        auto it = local.find(identifierName);
-        if (it == local.end())
+        for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt) {
+            auto& locals = (*blockIt)->locals;
+            auto it = locals.find(identifierName);
+            if (it != locals.end()) {
+                varPtr = it->second.first;
+                varType = it->second.second;
+                break; 
+            }
+        }
+        if (!varPtr)
         {
             std::cerr << "Undefined: " << identifierName << "\n";
             return nullptr;
         }
-        varPtr = it->second.first;
-        varType = it->second.second;
 
         llvm::Value *exprValue = value->codeGeneration(context);
         context.builder.CreateStore(exprValue, varPtr);
@@ -397,15 +409,20 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
     else if (typeid(*identifier) == typeid(ArrayAccess))
     {
         identifierName = dynamic_cast<ArrayAccess *>(identifier.get())->identifier->value;
-        auto local = context.locals();
-        auto it = local.find(identifierName);
-        if (it == local.end())
+        for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt) {
+            auto& locals = (*blockIt)->locals;
+            auto it = locals.find(identifierName);
+            if (it != locals.end()) {
+                varPtr = it->second.first;
+                varType = it->second.second;
+                break; 
+            }
+        }
+        if (!varPtr)
         {
             std::cerr << "Undefined: " << identifierName << "\n";
             return nullptr;
         }
-        varPtr = it->second.first;
-        varType = it->second.second;
 
         llvm::Value *indexValue = dynamic_cast<ArrayAccess *>(identifier.get())->index->codeGeneration(context);
 
@@ -496,6 +513,8 @@ llvm::Value *Block::codeGeneration(CodeGenContext &context)
 {
     llvm::Value *lastValue = nullptr;
 
+    context.pushBlock(context.builder.GetInsertBlock());
+
     for (const auto &statement : statementList)
     {
         if (statement)
@@ -503,6 +522,8 @@ llvm::Value *Block::codeGeneration(CodeGenContext &context)
             lastValue = statement->codeGeneration(context);
         }
     }
+
+    context.popBlock();
 
     return lastValue;
 };
@@ -539,24 +560,31 @@ llvm::Value *Condition::codeGeneration(CodeGenContext &context)
         return nullptr;
     }
 
-    if (!dynamic_cast<Return*>(ifBlock.get())) {
-        auto block = dynamic_cast<Block*>(ifBlock.get());
-        if (!block || !dynamic_cast<Return*>(block->statementList[0].get())) {
-            context.builder.CreateBr(mergeBl);
-        }
+    if (context.builder.GetInsertBlock()->getTerminator() == nullptr) {
+        context.builder.CreateBr(mergeBl);
     }
 
-    thenBl = context.builder.GetInsertBlock();
+    // if (!dynamic_cast<Return*>(ifBlock.get())) {
+    //     auto block = dynamic_cast<Block*>(ifBlock.get());
+    //     if (!block || !dynamic_cast<Return*>(block->statementList[0].get())) {
+    //         context.builder.CreateBr(mergeBl);
+    //     }
+    // }
 
     context.builder.SetInsertPoint(elseBl);
-    llvm::Value *elseV = elseBlock ? elseBlock->codeGeneration(context) : nullptr;
-    if (elseBlock && !elseV)
-    {
-        std::cerr << "Failed to generate 'else' block." << "\n";
-        return nullptr;
+    if (elseBlock) {
+        llvm::Value *elseV = elseBlock->codeGeneration(context);
+        if (!elseV) {
+            std::cerr << "Failed to generate 'else' block." << "\n";
+            return nullptr;
+        }
+        if(context.builder.GetInsertBlock()->getTerminator() == nullptr) {
+            context.builder.CreateBr(mergeBl);
+        }
+
+    } else {
+        context.builder.CreateBr(mergeBl);
     }
-    context.builder.CreateBr(mergeBl);
-    elseBl = context.builder.GetInsertBlock();
 
     context.builder.SetInsertPoint(mergeBl);
 
@@ -569,6 +597,8 @@ llvm::Value *ForLoop::codeGeneration(CodeGenContext &context)
     llvm::BasicBlock *loopHeader = llvm::BasicBlock::Create(context.llvmContext, "loopHeader", function);
     llvm::BasicBlock *loopBody = llvm::BasicBlock::Create(context.llvmContext, "loopBody", function);
     llvm::BasicBlock *loopEnd = llvm::BasicBlock::Create(context.llvmContext, "loopEnd", function);
+
+    context.pushBlock(loopHeader); 
 
     if (initializer)
     {
@@ -599,6 +629,8 @@ llvm::Value *ForLoop::codeGeneration(CodeGenContext &context)
 
     context.builder.CreateBr(loopHeader);
     context.builder.SetInsertPoint(loopEnd);
+
+    context.popBlock();
 
     return condValue; // dump value;
 }
@@ -709,7 +741,7 @@ llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
 
     llvm::BasicBlock *block = llvm::BasicBlock::Create(context.llvmContext, "entry", function);
     context.builder.SetInsertPoint(block);
-    context.pushBlock(std::unique_ptr<llvm::BasicBlock>(block));
+    context.pushBlock(block);
 
     for (auto &arg : function->args())
     {
@@ -724,15 +756,12 @@ llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
     llvm::Value *returnValue = bodyBlock->codeGeneration(context);
     if (!returnValue && prototype->returnType != VOID) {
         std::cerr << "Failed to generate function body" << "\n";
-        function->eraseFromParent();
         return nullptr;
     }
 
     if (prototype->returnType == VOID) {
         context.builder.CreateRetVoid();
-    } /*else if (returnValue) {
-        context.builder.CreateRet(returnValue); // return statement should generate return code
-    }*/
+    } 
 
     llvm::verifyFunction(*function);
     return function;
