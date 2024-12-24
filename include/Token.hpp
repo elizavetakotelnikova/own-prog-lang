@@ -56,6 +56,7 @@ enum TokenType {
 
     // Keywords
     INT,
+    BIGINT,
     FLOAT,
     STR,
     CHAR,

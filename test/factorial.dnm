@@ -1,6 +1,5 @@
-function factorial(int n) -> int {
+function factorial(bigint n) -> bigint {
     if (n == 0 || n == 1){
-        print(n);
         return 1;
     }
     return n * factorial(n - 1);

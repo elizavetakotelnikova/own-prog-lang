@@ -23,7 +23,7 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
 
         if (!node->codeGeneration(*this))
         {
-            std::cout << "Code generation failed for AST node No." << i << " " << node->toString() << "\n";
+            std::cout << "Code generation failed for AST node No." << i << ":" << node->toString() << "\n";
         }
         else {
             std::cout << "Succeed for AST Node: " << node->toString() << "\n";
@@ -35,7 +35,7 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
 
         i++;
     }
-
+    popBlock();
     std::cout << "Code generated for AST node succeed" << "\n";
     builder.CreateRetVoid();
     module->print(llvm::outs(), nullptr);

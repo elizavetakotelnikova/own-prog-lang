@@ -8,4 +8,4 @@ function factorial(int n) -> int {
     return 1;
 }
 
-print(factorial(23));
+print(factorial(1));

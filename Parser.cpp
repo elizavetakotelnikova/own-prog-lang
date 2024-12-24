@@ -57,7 +57,7 @@ unique_ptr<Token> Parser::consumeToken(TokenType type, string errorMessage)
 
 unique_ptr<Statement> Parser::statement()
 {
-    if (matchToken({INT, FLOAT, STR, CHAR, BOOL})) return variableDeclaration();
+    if (matchToken({INT, BIGINT, FLOAT, STR, CHAR, BOOL})) return variableDeclaration();
     if (matchToken({ARRAY})) return arrayDeclaration();
     if (matchToken({PRINT})) return print();
     if (matchToken({LEFT_BRACE})) return block();
@@ -86,7 +86,7 @@ unique_ptr<Statement> Parser::variableDeclaration()
 
 unique_ptr<Statement> Parser::arrayDeclaration()
 {
-    if (!matchToken({INT, FLOAT, STR, CHAR, BOOL})) std::cerr << "expect type";
+    if (!matchToken({INT, BIGINT, FLOAT, STR, CHAR, BOOL})) std::cerr << "expect type";
     TokenType type = previousToken()->type;
     string varName = consumeToken(IDENTIFIER, "expect variable name")->value;
     auto identifier = make_unique<Identifier>(varName);
@@ -145,7 +145,7 @@ unique_ptr<Statement> Parser::forLoop()
     unique_ptr<Statement> initializer;
     if (matchToken({SEMICOLON})){
         initializer = nullptr;
-    } else if (matchToken({INT, FLOAT, STR, CHAR, BOOL})) {
+    } else if (matchToken({INT, BIGINT, FLOAT, STR, CHAR, BOOL})) {
         initializer = variableDeclaration();
     } else {
         initializer = expressionStatement();
@@ -184,7 +184,7 @@ std::unique_ptr<Statement> Parser::prototypeFunction()
     vector<pair<TokenType, string>> functionArgs;
     if (!matchToken({RIGHT_PAREN})){
         while (true){
-            if (!matchToken({INT, FLOAT, STR, CHAR, BOOL})){
+            if (!matchToken({INT, BIGINT, FLOAT, STR, CHAR, BOOL})){
                 std::cerr << "expect argument type";
             }
             TokenType argType = previousToken()->type;
@@ -203,7 +203,7 @@ std::unique_ptr<Statement> Parser::prototypeFunction()
     }
     
     consumeToken(RETURN_TYPE, "expect return type");
-    if (!matchToken({INT, FLOAT, STR, CHAR, BOOL, VOID})){
+    if (!matchToken({INT, BIGINT, FLOAT, STR, CHAR, BOOL, VOID})){
         std::cerr << "expect return type";
     }
     auto returnType = previousToken()->type;

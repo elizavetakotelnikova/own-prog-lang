@@ -11,6 +11,7 @@ class Lexer
     int current = 0;
     std::map<std::string, TokenType> keywords = {
         {"int", INT},
+        {"bigint", BIGINT},
         {"float", FLOAT},
         {"string", STR},
         {"char", CHAR},

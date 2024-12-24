@@ -44,13 +44,16 @@ llvm::Value *CharLiteral::codeGeneration(CodeGenContext &context)
 
 llvm::Value *Identifier::codeGeneration(CodeGenContext &context)
 {
-    for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt) {
-        auto& locals = (*blockIt)->locals; 
+    for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt)
+    {
+        auto &locals = (*blockIt)->locals;
         auto it = locals.find(value);
-        if (it != locals.end()) {
+        if (it != locals.end())
+        {
             llvm::Value *varPtr = it->second.first;
             llvm::Type *varType = it->second.second;
-            if (!varPtr) {
+            if (!varPtr)
+            {
                 std::cerr << "Null pointer for variable: " << value << "\n";
                 return nullptr;
             }
@@ -94,13 +97,38 @@ llvm::Value *Binary::codeGeneration(CodeGenContext &context)
     {
         return nullptr;
     }
+    llvm::Type *leftType = leftValue->getType();
+    llvm::Type *rightType = rightValue->getType();
 
-    if (rightValue->getType() != leftValue->getType())
+    if (leftType != rightType)
     {
-        // since we only support double and int, always cast to double in case of different types.
-        auto doubleTy = llvm::Type::getDoubleTy(context.llvmContext);
-        rightValue = context.builder.CreateCast(llvm::Instruction::CastOps::SIToFP, rightValue, doubleTy, "castdb");
-        leftValue = context.builder.CreateCast(llvm::Instruction::CastOps::SIToFP, leftValue, doubleTy, "castdb");
+        if (leftType->isIntegerTy() && rightType->isFloatingPointTy())
+        {
+            leftValue = context.builder.CreateSIToFP(leftValue, rightType, "castLeft");
+        }
+        else if (leftType->isFloatingPointTy() && rightType->isIntegerTy())
+        {
+            rightValue = context.builder.CreateSIToFP(rightValue, leftType, "castRight");
+        }
+        else if (leftType->isIntegerTy() && rightType->isIntegerTy())
+        {
+            unsigned leftBits = leftType->getIntegerBitWidth();
+            unsigned rightBits = rightType->getIntegerBitWidth();
+            if (leftBits > rightBits)
+            {
+                rightValue = context.builder.CreateSExt(rightValue, leftType, "castRight");
+            }
+            else if (rightBits > leftBits)
+            {
+                leftValue = context.builder.CreateSExt(leftValue, rightType, "castLeft");
+            }
+        }
+
+        else
+        {
+            std::cerr << "Unsupported type combination in binary operation: " << leftType->getTypeID() << " and " << rightType->getTypeID() << "\n";
+            return nullptr;
+        }
     }
 
     bool isDoubleTy = rightValue->getType()->isFloatingPointTy();
@@ -147,12 +175,38 @@ llvm::Value *Comparison::codeGeneration(CodeGenContext &context)
         return nullptr;
     }
 
-    if (rightValue->getType() != leftValue->getType())
+    llvm::Type *leftType = leftValue->getType();
+    llvm::Type *rightType = rightValue->getType();
+
+    if (leftType != rightType)
     {
-        // since we only support double and int, always cast to double in case of different types.
-        auto doubleTy = llvm::Type::getDoubleTy(context.llvmContext);
-        rightValue = context.builder.CreateCast(llvm::Instruction::CastOps::SIToFP, rightValue, doubleTy, "castdb");
-        leftValue = context.builder.CreateCast(llvm::Instruction::CastOps::SIToFP, leftValue, doubleTy, "castdb");
+        if (leftType->isIntegerTy() && rightType->isFloatingPointTy())
+        {
+            leftValue = context.builder.CreateSIToFP(leftValue, rightType, "castLeft");
+        }
+        else if (leftType->isFloatingPointTy() && rightType->isIntegerTy())
+        {
+            rightValue = context.builder.CreateSIToFP(rightValue, leftType, "castRight");
+        }
+        else if (leftType->isIntegerTy() && rightType->isIntegerTy())
+        {
+            unsigned leftBits = leftType->getIntegerBitWidth();
+            unsigned rightBits = rightType->getIntegerBitWidth();
+            if (leftBits > rightBits)
+            {
+                rightValue = context.builder.CreateSExt(rightValue, leftType, "castRight");
+            }
+            else if (rightBits > leftBits)
+            {
+                leftValue = context.builder.CreateSExt(leftValue, rightType, "castLeft");
+            }
+        }
+
+        else
+        {
+            std::cerr << "Unsupported type combination in binary operation: " << leftType->getTypeID() << " and " << rightType->getTypeID() << "\n";
+            return nullptr;
+        }
     }
 
     bool isDoubleTy = rightValue->getType()->isFloatingPointTy();
@@ -191,28 +245,75 @@ llvm::Value *Comparison::codeGeneration(CodeGenContext &context)
 llvm::Value *CallFunction::codeGeneration(CodeGenContext &context)
 {
     llvm::Function *CalleeF = context.module->getFunction(functionName);
-    if (!CalleeF) {
+    if (!CalleeF)
+    {
         std::cerr << "Unknown function referenced: " << functionName << "\n";
         return nullptr;
     }
 
-    if (CalleeF->arg_size() != functionArgs.size()) {
+    if (CalleeF->arg_size() != functionArgs.size())
+    {
         std::cerr << "Incorrect number of arguments passed to function: " << functionName << "\n";
         return nullptr;
     }
 
     std::vector<llvm::Value *> ArgsV;
-    for (auto &arg : functionArgs) {
-        llvm::Value *argValue = arg->codeGeneration(context);
-        if (!argValue) {
-            std::cerr << "Failed to generate code for argument in function call: " << functionName << "\n";
+    for (unsigned i = 0; i < functionArgs.size(); ++i)
+    {
+        llvm::Value *argValue = functionArgs[i]->codeGeneration(context);
+        if (!argValue)
+        {
+            std::cerr << "Failed to generate code for argument in function call: " << functionName << std::endl;
             return nullptr;
+        }
+
+        llvm::Type *expectedArgType = CalleeF->getArg(i)->getType();
+        llvm::Type *argType = argValue->getType();
+
+        if (argType != expectedArgType)
+        {
+            if (expectedArgType->isIntegerTy() && argType->isIntegerTy())
+            {
+                unsigned expectedBits = expectedArgType->getIntegerBitWidth();
+                unsigned argBits = argType->getIntegerBitWidth();
+
+                if (argBits < expectedBits)
+                {
+                    if (argBits == 1)
+                    {                                                                                                      
+                        argValue = context.builder.CreateIntCast(argValue, expectedArgType, true, "arg_cast_bool_to_int"); 
+                    }
+                    else
+                    {
+                        argValue = context.builder.CreateSExt(argValue, expectedArgType, "arg_cast_sext"); 
+                    }
+                }
+                else
+                {                                                                                        
+                    argValue = context.builder.CreateTrunc(argValue, expectedArgType, "arg_cast_trunc"); 
+                }
+            }
+            else if (expectedArgType->isFloatingPointTy() && argType->isIntegerTy())
+            {
+                argValue = context.builder.CreateSIToFP(argValue, expectedArgType, "arg_cast");
+            }
+            else if (expectedArgType->isIntegerTy() && argType->isFloatingPointTy())
+            {
+                argValue = context.builder.CreateFPToSI(argValue, expectedArgType, "arg_cast");
+            }
+            else
+            {
+                std::cerr << "Incompatible argument type" << std::endl;
+                context.popBlock();
+                return nullptr;
+            }
         }
         ArgsV.push_back(argValue);
     }
 
     llvm::CallInst *callInst = context.builder.CreateCall(CalleeF, ArgsV);
-    if (CalleeF->getReturnType()->isVoidTy()) {
+    if (CalleeF->getReturnType()->isVoidTy())
+    {
         return callInst;
     }
 
@@ -220,19 +321,20 @@ llvm::Value *CallFunction::codeGeneration(CodeGenContext &context)
     return callInst;
 }
 
-
 llvm::Value *ArrayAccess::codeGeneration(CodeGenContext &context)
 {
-    llvm::Value* arrayPtr = nullptr;
-    llvm::Type* arrayType = nullptr;
+    llvm::Value *arrayPtr = nullptr;
+    llvm::Type *arrayType = nullptr;
 
-    for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt) {
-        auto& locals = (*blockIt)->locals;
+    for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt)
+    {
+        auto &locals = (*blockIt)->locals;
         auto it = locals.find(identifier->value);
-        if (it != locals.end()) {
+        if (it != locals.end())
+        {
             arrayPtr = it->second.first;
             arrayType = it->second.second;
-            break; 
+            break;
         }
     }
     if (!arrayPtr)
@@ -270,6 +372,9 @@ llvm::Value *ArrayDeclaration::codeGeneration(CodeGenContext &context)
     {
     case TokenType::INT:
         elementType = llvm::Type::getInt32Ty(context.llvmContext);
+        break;
+    case TokenType::BIGINT: // 128 bit
+        elementType = llvm::Type::getInt128Ty(context.llvmContext);
         break;
     case TokenType::FLOAT:
         elementType = llvm::Type::getFloatTy(context.llvmContext);
@@ -320,6 +425,10 @@ llvm::Value *VariableDeclaration::codeGeneration(CodeGenContext &context)
     case TokenType::INT:
         varType = llvm::Type::getInt32Ty(context.llvmContext);
         std::cout << "Assigned type - int32" << "\n";
+        break;
+    case TokenType::BIGINT: // 128 bit
+        varType = llvm::Type::getInt128Ty(context.llvmContext);
+        std::cout << "Assigned type - int128" << "\n";
         break;
     case TokenType::FLOAT:
         varType = llvm::Type::getFloatTy(context.llvmContext);
@@ -387,13 +496,15 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
     if (typeid(*identifier) == typeid(Identifier))
     {
         identifierName = dynamic_cast<Identifier *>(identifier.get())->value;
-        for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt) {
-            auto& locals = (*blockIt)->locals;
+        for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt)
+        {
+            auto &locals = (*blockIt)->locals;
             auto it = locals.find(identifierName);
-            if (it != locals.end()) {
+            if (it != locals.end())
+            {
                 varPtr = it->second.first;
                 varType = it->second.second;
-                break; 
+                break;
             }
         }
         if (!varPtr)
@@ -409,13 +520,15 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
     else if (typeid(*identifier) == typeid(ArrayAccess))
     {
         identifierName = dynamic_cast<ArrayAccess *>(identifier.get())->identifier->value;
-        for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt) {
-            auto& locals = (*blockIt)->locals;
+        for (auto blockIt = context.blocks.rbegin(); blockIt != context.blocks.rend(); ++blockIt)
+        {
+            auto &locals = (*blockIt)->locals;
             auto it = locals.find(identifierName);
-            if (it != locals.end()) {
+            if (it != locals.end())
+            {
                 varPtr = it->second.first;
                 varType = it->second.second;
-                break; 
+                break;
             }
         }
         if (!varPtr)
@@ -427,14 +540,13 @@ llvm::Value *Assignment::codeGeneration(CodeGenContext &context)
         llvm::Value *indexValue = dynamic_cast<ArrayAccess *>(identifier.get())->index->codeGeneration(context);
 
         llvm::Value *elementPtr = context.builder.CreateGEP(
-            varType, 
-            varPtr, 
-            {context.builder.getInt32(0), indexValue}, 
+            varType,
+            varPtr,
+            {context.builder.getInt32(0), indexValue},
             "elementPtr");
 
         llvm::Value *exprValue = value->codeGeneration(context);
         context.builder.CreateStore(exprValue, elementPtr);
-        
 
         return exprValue;
     }
@@ -484,6 +596,10 @@ llvm::Value *Print::codeGeneration(CodeGenContext &context)
     if (valueType->isIntegerTy(32))
     {
         formatStr = context.builder.CreateGlobalStringPtr("%d\n", "formatStr");
+    }
+    else if (valueType->isIntegerTy(128))
+    {
+        formatStr = context.builder.CreateGlobalStringPtr("%lld\n", "formatStr");
     }
     else if (valueType->isFloatingPointTy())
     {
@@ -560,7 +676,8 @@ llvm::Value *Condition::codeGeneration(CodeGenContext &context)
         return nullptr;
     }
 
-    if (context.builder.GetInsertBlock()->getTerminator() == nullptr) {
+    if (context.builder.GetInsertBlock()->getTerminator() == nullptr)
+    {
         context.builder.CreateBr(mergeBl);
     }
 
@@ -572,17 +689,21 @@ llvm::Value *Condition::codeGeneration(CodeGenContext &context)
     // }
 
     context.builder.SetInsertPoint(elseBl);
-    if (elseBlock) {
+    if (elseBlock)
+    {
         llvm::Value *elseV = elseBlock->codeGeneration(context);
-        if (!elseV) {
+        if (!elseV)
+        {
             std::cerr << "Failed to generate 'else' block." << "\n";
             return nullptr;
         }
-        if(context.builder.GetInsertBlock()->getTerminator() == nullptr) {
+        if (context.builder.GetInsertBlock()->getTerminator() == nullptr)
+        {
             context.builder.CreateBr(mergeBl);
         }
-
-    } else {
+    }
+    else
+    {
         context.builder.CreateBr(mergeBl);
     }
 
@@ -598,7 +719,7 @@ llvm::Value *ForLoop::codeGeneration(CodeGenContext &context)
     llvm::BasicBlock *loopBody = llvm::BasicBlock::Create(context.llvmContext, "loopBody", function);
     llvm::BasicBlock *loopEnd = llvm::BasicBlock::Create(context.llvmContext, "loopEnd", function);
 
-    context.pushBlock(loopHeader); 
+    context.pushBlock(loopHeader);
 
     if (initializer)
     {
@@ -680,6 +801,9 @@ llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
         case INT:
             argTypes[i] = llvm::Type::getInt32Ty(context.llvmContext);
             break;
+        case BIGINT:
+            argTypes[i] = llvm::Type::getInt128Ty(context.llvmContext);
+            break;
         case FLOAT:
             argTypes[i] = llvm::Type::getFloatTy(context.llvmContext);
             break;
@@ -700,6 +824,9 @@ llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
     {
     case INT:
         retType = llvm::Type::getInt32Ty(context.llvmContext);
+        break;
+    case BIGINT:
+        retType = llvm::Type::getInt128Ty(context.llvmContext);
         break;
     case FLOAT:
         retType = llvm::Type::getFloatTy(context.llvmContext);
@@ -733,8 +860,9 @@ llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
 
 llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
 {
-    llvm::Function* function = static_cast<llvm::Function*>(prototype->codeGeneration(context));
-    if (!function) {
+    llvm::Function *function = static_cast<llvm::Function *>(prototype->codeGeneration(context));
+    if (!function)
+    {
         std::cerr << "Failed to generate function prototype" << "\n";
         return nullptr;
     }
@@ -745,24 +873,66 @@ llvm::Value *FunctionNode::codeGeneration(CodeGenContext &context)
 
     for (auto &arg : function->args())
     {
-        llvm::AllocaInst *alloc = context.builder.CreateAlloca(arg.getType(), nullptr, arg.getName());
+        llvm::Type *expectedArgType = arg.getType();
+        llvm::Value *argValue = &arg;
+        llvm::AllocaInst *alloc = context.builder.CreateAlloca(expectedArgType, nullptr, arg.getName());
 
+        if (argValue->getType() != expectedArgType)
+        {
+            if (expectedArgType->isIntegerTy() && argValue->getType()->isIntegerTy())
+            {
+                unsigned expectedBits = expectedArgType->getIntegerBitWidth();
+                unsigned argBits = argValue->getType()->getIntegerBitWidth();
+
+                if (argBits < expectedBits)
+                {
+                    if (argBits == 1)
+                    {                                                                                                      
+                        argValue = context.builder.CreateIntCast(argValue, expectedArgType, true, "arg_cast_bool_to_int"); 
+                    }
+                    else
+                    {
+                        argValue = context.builder.CreateSExt(argValue, expectedArgType, "arg_cast_Sext"); 
+                    }
+                }
+                else
+                {                                                                                        
+                    argValue = context.builder.CreateTrunc(argValue, expectedArgType, "arg_cast_trunc"); 
+                }
+            }
+            else if (expectedArgType->isFloatingPointTy() && argValue->getType()->isIntegerTy())
+            {
+                argValue = context.builder.CreateSIToFP(argValue, expectedArgType, "arg_cast");
+            }
+            else if (expectedArgType->isIntegerTy() && argValue->getType()->isFloatingPointTy())
+            {
+                argValue = context.builder.CreateFPToSI(argValue, expectedArgType, "arg_cast");
+            }
+            else
+            {
+                std::cerr << "Incompatible argument type" << std::endl;
+                context.popBlock();
+                return nullptr;
+            }
+        }
         context.builder.CreateStore(&arg, alloc);
 
         context.locals()[arg.getName().str()] = {alloc, arg.getType()};
     }
 
-
     llvm::Value *returnValue = bodyBlock->codeGeneration(context);
-    if (!returnValue && prototype->returnType != VOID) {
+    if (!returnValue && prototype->returnType != VOID)
+    {
         std::cerr << "Failed to generate function body" << "\n";
         return nullptr;
     }
 
-    if (prototype->returnType == VOID) {
+    if (prototype->returnType == VOID)
+    {
         context.builder.CreateRetVoid();
-    } 
+    }
 
+    context.popBlock();
     llvm::verifyFunction(*function);
     return function;
 }
@@ -786,7 +956,34 @@ llvm::Value *Return::codeGeneration(CodeGenContext &context)
     llvm::Type *returnType = currentFunction->getReturnType();
     if (returnType != returnValue->getType())
     {
-        returnValue = context.builder.CreateBitCast(returnValue, returnType, "casted_return_value");
+        if (returnType->isIntegerTy() && returnValue->getType()->isIntegerTy())
+        {
+            unsigned returnBits = returnType->getIntegerBitWidth();
+            unsigned valueBits = returnValue->getType()->getIntegerBitWidth();
+
+            if (valueBits < returnBits)
+            {
+                returnValue = context.builder.CreateSExt(returnValue, returnType, "extended_return_value");
+            }
+            else if (valueBits > returnBits)
+            {
+                returnValue = context.builder.CreateTrunc(returnValue, returnType, "truncated_return_value");
+            }
+        }
+        else if (returnType->isFloatingPointTy() && returnValue->getType()->isIntegerTy())
+        {
+            returnValue = context.builder.CreateSIToFP(returnValue, returnType, "int_to_fp");
+        }
+        else if (returnType->isIntegerTy() && returnValue->getType()->isFloatingPointTy())
+        {
+            returnValue = context.builder.CreateFPToSI(returnValue, returnType, "fp_to_int");
+        }
+
+        else
+        {
+            std::cerr << "Incompatible return type" << std::endl;
+            return nullptr;
+        }
     }
 
     context.builder.CreateRet(returnValue);
