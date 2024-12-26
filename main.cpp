@@ -8,6 +8,9 @@
 #include "include/OwnProgLangJIT.h"
 
 int main(int argc, char *argv[]){
+	llvm::InitializeNativeTarget();
+	llvm::InitializeNativeTargetAsmPrinter();
+	llvm::InitializeNativeTargetAsmParser();
     std::ifstream inputFile(argv[1]);
 	if (!inputFile.is_open()){
 		std::cout << "Error opening file" << "\n";

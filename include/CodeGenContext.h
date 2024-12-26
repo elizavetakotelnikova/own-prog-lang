@@ -1,5 +1,6 @@
 #pragma once
 
+#include "OwnProgLangJIT.h"
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
@@ -26,6 +27,7 @@ public:
 class CodeGenContext {
 private:
     GCManager gcManager;
+    std::unique_ptr<llvm::orc::OwnProgLangJIT> JIT;
 
 public:
     std::list<CodeGenBlock*> blocks;
@@ -34,7 +36,8 @@ public:
     llvm::IRBuilder<> builder; 
     std::unique_ptr<llvm::Function> mainFunction;
 
-    CodeGenContext() : builder(llvmContext) 
+    CodeGenContext() : builder(llvmContext),
+          JIT(std::move(*llvm::orc::OwnProgLangJIT::Create()))
     {
         llvm::InitializeNativeTarget();
         llvm::InitializeNativeTargetAsmParser();
@@ -60,7 +63,7 @@ public:
     }
 
     void generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList);
-    llvm::GenericValue runCode();
+    void runCode();
 
     GCManager& getGCManager() {
         return gcManager;

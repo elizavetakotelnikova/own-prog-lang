@@ -1,5 +1,4 @@
-#ifndef OWN_PROG_LANG_JIT_H
-#define OWN_PROG_LANG_JIT_H
+#pragma once
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ExecutionEngine/Orc/CompileOnDemandLayer.h"
@@ -22,57 +21,16 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "AST.h"
-#include "CodeGenContext.h"
 #include <memory>
 
 namespace llvm {
     namespace orc {
-        class OwnProgLangASTLayer;
-        class OwnProgLangASTMaterializationUnit;
-
-        class OwnProgLangASTMaterializationUnit : public MaterializationUnit {
-        public:
-            OwnProgLangASTMaterializationUnit(OwnProgLangASTLayer &L, std::unique_ptr<FunctionNode> F);
-
-            StringRef getName() const override {
-                return "OwnProgLangASTMaterializationUnit";
-            }
-
-            void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
-
-        private:
-            OwnProgLangASTLayer &L;
-            std::unique_ptr<FunctionNode> F;
-
-            void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override {
-                llvm_unreachable("OwnProgLang functions are not overridable");
-            }
-        };
-
-        class OwnProgLangASTLayer {
-        public:
-            OwnProgLangASTLayer(IRLayer &BaseLayer, const DataLayout &DL) : BaseLayer(BaseLayer), DL(DL) {
-            }
-
-            Error add(ResourceTrackerSP RT, std::unique_ptr<FunctionNode> F);
-
-            void emit(std::unique_ptr<MaterializationResponsibility> MR, std::unique_ptr<FunctionNode> F);
-
-            MaterializationUnit::Interface getInterface(FunctionNode &F);
-
-        private:
-            IRLayer &BaseLayer;
-            const DataLayout &DL;
-        };
-
         class OwnProgLangJIT {
         private:
             std::unique_ptr<ExecutionSession> ES;
-            std::unique_ptr<EPCIndirectionUtils> EPCIU;
             RTDyldObjectLinkingLayer ObjectLayer;
             IRCompileLayer CompileLayer;
             IRTransformLayer TransformLayer;
-            OwnProgLangASTLayer ASTLayer;
 
             DataLayout DL;
             MangleAndInterner Mangle;
@@ -86,13 +44,11 @@ namespace llvm {
             }
 
         public:
-            OwnProgLangJIT(std::unique_ptr<ExecutionSession> ES, std::unique_ptr<EPCIndirectionUtils> EPCIU,
-                           JITTargetMachineBuilder JTMB, DataLayout DL)
-                : ES(std::move(ES)), EPCIU(std::move(EPCIU)), DL(std::move(DL)), Mangle(*this->ES, this->DL),
+            OwnProgLangJIT(std::unique_ptr<ExecutionSession> ES, JITTargetMachineBuilder JTMB, DataLayout DL)
+                : ES(std::move(ES)), DL(std::move(DL)), Mangle(*this->ES, this->DL),
                   ObjectLayer(*this->ES, []() { return std::make_unique<SectionMemoryManager>(); }),
                   CompileLayer(*this->ES, ObjectLayer, std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
                   TransformLayer(*this->ES, CompileLayer, optimizeModule),
-                  ASTLayer(TransformLayer, this->DL),
                   MainJD(this->ES->createBareJITDylib("<main>")) {
                 MainJD.addGenerator(
                     cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
@@ -102,9 +58,9 @@ namespace llvm {
 
             Error addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nullptr);
 
-            Error addAST(std::unique_ptr<FunctionNode> F, ResourceTrackerSP RT = nullptr);
+            // Error addAST(std::unique_ptr<FunctionNode> F, ResourceTrackerSP RT = nullptr);
 
-            llvm::Expected<llvm::orc::ExecutorSymbolDef>  lookup(llvm::StringRef Name);
+            llvm::Expected<llvm::orc::ExecutorSymbolDef> lookup(llvm::StringRef Name);
 
             const llvm::DataLayout &getDataLayout() const { return DL; }
             JITDylib &getMainJITDylib() { return MainJD; }
@@ -115,4 +71,3 @@ namespace llvm {
         };
     }
 }
-#endif
