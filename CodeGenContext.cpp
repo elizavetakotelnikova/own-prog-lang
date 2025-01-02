@@ -2,14 +2,16 @@
 #include "include/CodeGenContext.h"
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/ExecutionEngine/Orc/Core.h>
 
 void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList) {
     llvm::FunctionType *funcType = llvm::FunctionType::get(
         llvm::Type::getVoidTy(llvmContext), {}, false);
     mainFunction = std::unique_ptr<llvm::Function>(llvm::Function::Create(
         funcType, llvm::Function::ExternalLinkage, "main", module.get()));
+    llvm::Function* fn = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, "main", module.get());
 
-    llvm::BasicBlock *entry = llvm::BasicBlock::Create(llvmContext, "entry", mainFunction.get());
+    llvm::BasicBlock *entry = llvm::BasicBlock::Create(llvmContext, "entry", fn);
     builder.SetInsertPoint(entry);
     pushBlock(entry);
     int i = 0;
@@ -41,6 +43,9 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
     if (auto Err = JIT->addModule(std::move(TSM))) {
         llvm::errs() << "Failed to add module to JIT: " << llvm::toString(std::move(Err)) << "\n";
         return;
+    } else {
+      	llvm::errs() << "Successfully loaded JIT\n";
+      	return;
     }
 }
 
@@ -48,23 +53,28 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
 void CodeGenContext::runCode() {
     std::cout << "Running code...\n";
 
-    if (!mainFunction) {
-        std::cerr << "Main function not set.\n";
-        return;
-    }
+//    if (!mainFunction) {
+//        std::cerr << "Main function not set.\n";
+//        return;
+//    }
 
     if (!JIT) {
         std::cerr << "JIT is not initialized.\n";
         return;
     }
 
-    auto Sym = JIT->lookup("main");
+    std::cout << "Available symbols in JIT:\n";
+    auto& ES = *JIT->getExecutionSession();
+    ES.dump(llvm::outs());
+
+    auto Sym = JIT->lookup("main.1");
     if (!Sym) {
         llvm::errs() << "Failed to find 'main' function: " << llvm::toString(Sym.takeError()) << "\n";
         return;
     }
 
     using MainFuncType = void (*)();
+//    auto MainFunc = Sym->toPtr<MainFuncType>();
     auto MainFunc = Sym->getAddress().toPtr<MainFuncType>();
 
     if (MainFunc) {

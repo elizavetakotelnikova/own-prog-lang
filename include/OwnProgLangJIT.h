@@ -38,11 +38,6 @@ namespace llvm {
 
             JITDylib &MainJD;
 
-            static void handleLazyCallThroughError() {
-                errs() << "LazyCallThrough error: Could not find function body";
-                exit(1);
-            }
-
         public:
             OwnProgLangJIT(std::unique_ptr<ExecutionSession> ES, JITTargetMachineBuilder JTMB, DataLayout DL)
                 : ES(std::move(ES)), DL(std::move(DL)), Mangle(*this->ES, this->DL),
@@ -58,12 +53,11 @@ namespace llvm {
 
             Error addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nullptr);
 
-            // Error addAST(std::unique_ptr<FunctionNode> F, ResourceTrackerSP RT = nullptr);
-
             llvm::Expected<llvm::orc::ExecutorSymbolDef> lookup(llvm::StringRef Name);
 
             const llvm::DataLayout &getDataLayout() const { return DL; }
             JITDylib &getMainJITDylib() { return MainJD; }
+            std::unique_ptr<ExecutionSession> &getExecutionSession() { return ES; }
 
         private:
             static Expected<ThreadSafeModule> optimizeModule(ThreadSafeModule TSM,

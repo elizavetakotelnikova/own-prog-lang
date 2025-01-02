@@ -1,10 +1,6 @@
 #include "include/OwnProgLangJIT.h"
 #include "llvm/Support/Error.h"
 
-llvm::LLVMContext TheContext;
-std::unique_ptr<llvm::Module> TheModule;
-std::unique_ptr<llvm::IRBuilder<>> Builder;
-
 llvm::Expected<std::unique_ptr<llvm::orc::OwnProgLangJIT>> llvm::orc::OwnProgLangJIT::Create() {
     auto EPC = SelfExecutorProcessControl::Create();
     if (!EPC)
@@ -26,26 +22,40 @@ llvm::Error llvm::orc::OwnProgLangJIT::addModule(ThreadSafeModule TSM, ResourceT
     if (!RT)
         RT = MainJD.getDefaultResourceTracker();
 
-    return TransformLayer.add(RT, std::move(TSM));
+    llvm::errs() << "Adding module to JIT...\n";
+
+    if (auto Err = CompileLayer.add(RT, std::move(TSM))) {
+        llvm::errs() << "Failed to add module: " << llvm::toString(std::move(Err)) << "\n";
+        return Err;
+    }
+
+    llvm::errs() << "Module successfully added.\n";
+    return llvm::Error::success();
 }
 
 llvm::Expected<llvm::orc::ExecutorSymbolDef> llvm::orc::OwnProgLangJIT::lookup(StringRef Name) {
-    return ES->lookup({&MainJD}, Mangle(Name.str()));
+    auto Sym = ES->lookup({&MainJD}, Mangle(Name.str()));
+    if (!Sym) {
+        llvm::errs() << "Error: Symbol '" << Name << "' not found.\n";
+        llvm::errs() << llvm::toString(Sym.takeError()) << "\n";
+        return Sym.takeError();
+    }
+    return Sym;
 }
 
 llvm::Expected<llvm::orc::ThreadSafeModule> llvm::orc::OwnProgLangJIT::optimizeModule(ThreadSafeModule TSM, const MaterializationResponsibility &R) {
-//    TSM.withModuleDo([](Module &M) {
-//        auto FPM = std::make_unique<legacy::FunctionPassManager>(&M);
-//        FPM->add(createInstructionCombiningPass());
-//        FPM->add(createReassociatePass());
-//        FPM->add(createGVNPass());
-//        FPM->add(createCFGSimplificationPass());
-//        FPM->add(createLoopUnrollPass());
-//        FPM->add(createTailCallEliminationPass());
-//        FPM->doInitialization();
-//
-//        for (auto &F : M)
-//            FPM->run(F);
-//    });
+    TSM.withModuleDo([](Module &M) {
+        auto FPM = std::make_unique<legacy::FunctionPassManager>(&M);
+        FPM->add(createInstructionCombiningPass());
+        FPM->add(createReassociatePass());
+        FPM->add(createGVNPass());
+        FPM->add(createCFGSimplificationPass());
+        FPM->add(createLoopUnrollPass());
+        FPM->add(createTailCallEliminationPass());
+        FPM->doInitialization();
+
+        for (auto &F : M)
+            FPM->run(F);
+    });
     return std::move(TSM);
 }

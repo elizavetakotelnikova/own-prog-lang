@@ -19,13 +19,6 @@ int main(int argc, char *argv[]){
     std::stringstream ss;
 	ss << inputFile.rdbuf();
 	std::string sourceCode = ss.str();
-
-	auto JIT = llvm::orc::OwnProgLangJIT::Create();
-	if (!JIT) {
-		llvm::errs() << "Failed to create JIT: " << llvm::toString(JIT.takeError()) << "\n";
-		return 1;
-	}
-
 	Lexer lexer(sourceCode);
 	lexer.scanSourceCode();
 	int i = 0;
@@ -44,16 +37,6 @@ int main(int argc, char *argv[]){
 		if (!node->isChecked){
 			node->accept(visitor);
 
-			/*auto *FuncNode = dynamic_cast<FunctionNode *>(node.get());
-			if (FuncNode) {
-				if (auto Err = (*JIT)->addAST(
-                                  std::make_unique<FunctionNode>(
-                                      std::move(FuncNode->prototype),
-                                      std::move(FuncNode->bodyBlock)))) {
-					llvm::errs() << "Error adding AST to JIT: " << llvm::toString(std::move(Err)) << "\n";
-					return 1;
-				}
-			}*/
 		}
 		i++;
 	}
