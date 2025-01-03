@@ -49,14 +49,8 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
     }
 }
 
-
 void CodeGenContext::runCode() {
     std::cout << "Running code...\n";
-
-//    if (!mainFunction) {
-//        std::cerr << "Main function not set.\n";
-//        return;
-//    }
 
     if (!JIT) {
         std::cerr << "JIT is not initialized.\n";
@@ -74,7 +68,6 @@ void CodeGenContext::runCode() {
     }
 
     using MainFuncType = void (*)();
-//    auto MainFunc = Sym->toPtr<MainFuncType>();
     auto MainFunc = Sym->getAddress().toPtr<MainFuncType>();
 
     if (MainFunc) {

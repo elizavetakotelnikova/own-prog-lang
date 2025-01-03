@@ -13,6 +13,7 @@
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/Orc/Shared/ExecutorSymbolDef.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/IRBuilder.h"
@@ -22,6 +23,8 @@
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "AST.h"
 #include <memory>
+
+extern "C" void ___chkstk_ms();
 
 namespace llvm {
     namespace orc {
@@ -47,6 +50,7 @@ namespace llvm {
                   MainJD(this->ES->createBareJITDylib("<main>")) {
                 MainJD.addGenerator(
                     cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
+                registerChkStkMsSymbol();
             }
 
             static Expected<std::unique_ptr<OwnProgLangJIT> > Create();
@@ -62,6 +66,16 @@ namespace llvm {
         private:
             static Expected<ThreadSafeModule> optimizeModule(ThreadSafeModule TSM,
                                                              const MaterializationResponsibility &R);
+
+            void registerChkStkMsSymbol() {
+                llvm::orc::SymbolMap Symbols;
+
+                Symbols[Mangle("___chkstk_ms")] = {llvm::orc::ExecutorAddr::fromPtr(&___chkstk_ms),
+                                                llvm::JITSymbolFlags::Exported};
+
+                cantFail(MainJD.define(llvm::orc::absoluteSymbols(std::move(Symbols))));
+            }
+
         };
     }
 }

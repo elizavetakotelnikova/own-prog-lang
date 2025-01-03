@@ -1,5 +1,6 @@
 #include "include/OwnProgLangJIT.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Transforms/Scalar.h"
 
 llvm::Expected<std::unique_ptr<llvm::orc::OwnProgLangJIT>> llvm::orc::OwnProgLangJIT::Create() {
     auto EPC = SelfExecutorProcessControl::Create();
@@ -24,7 +25,7 @@ llvm::Error llvm::orc::OwnProgLangJIT::addModule(ThreadSafeModule TSM, ResourceT
 
     llvm::errs() << "Adding module to JIT...\n";
 
-    if (auto Err = CompileLayer.add(RT, std::move(TSM))) {
+    if (auto Err = TransformLayer.add(RT, std::move(TSM))) {
         llvm::errs() << "Failed to add module: " << llvm::toString(std::move(Err)) << "\n";
         return Err;
     }
@@ -47,15 +48,15 @@ llvm::Expected<llvm::orc::ThreadSafeModule> llvm::orc::OwnProgLangJIT::optimizeM
     TSM.withModuleDo([](Module &M) {
         auto FPM = std::make_unique<legacy::FunctionPassManager>(&M);
         FPM->add(createInstructionCombiningPass());
-        FPM->add(createReassociatePass());
         FPM->add(createGVNPass());
         FPM->add(createCFGSimplificationPass());
-        FPM->add(createLoopUnrollPass());
         FPM->add(createTailCallEliminationPass());
         FPM->doInitialization();
-
         for (auto &F : M)
             FPM->run(F);
+
+        llvm::errs() << "Optimized IR:\n";
+        M.print(llvm::errs(), nullptr);
     });
     return std::move(TSM);
 }

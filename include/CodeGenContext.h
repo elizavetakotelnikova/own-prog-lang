@@ -28,7 +28,6 @@ public:
 class CodeGenContext {
 private:
     GCManager gcManager;
-    // std::unique_ptr<llvm::orc::LLJIT> JIT;
     std::unique_ptr<llvm::orc::OwnProgLangJIT> JIT;
 
 public:
@@ -38,18 +37,8 @@ public:
     llvm::IRBuilder<> builder;
     std::unique_ptr<llvm::Function> mainFunction;
 
-    CodeGenContext() : builder(llvmContext), JIT(std::move(*llvm::orc::OwnProgLangJIT::Create()))
-    {
-        llvm::InitializeNativeTarget();
-        llvm::InitializeNativeTargetAsmParser();
-        llvm::InitializeNativeTargetAsmPrinter();
+    CodeGenContext() : builder(llvmContext), JIT(std::move(*llvm::orc::OwnProgLangJIT::Create())) {
         module = std::make_unique<llvm::Module>("main", llvmContext);
-
-        if (!llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr)) {
-            llvm::errs() << "Loaded default libraries successfully\n";
-        } else {
-            llvm::errs() << "Failed to load default libraries\n";
-        }
     }
 
     std::map<std::string, std::pair<llvm::Value*, llvm::Type*>>& locals(){
