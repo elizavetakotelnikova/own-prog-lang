@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <gc/gc.h>
 #include "include/VisitorPrintNode.h"
 #include "include/Lexer.h"
 #include "include/Parser.h"
@@ -8,6 +9,9 @@
 #include "include/OwnProgLangJIT.h"
 
 int main(int argc, char *argv[]){
+
+	GC_INIT();
+
 	llvm::InitializeNativeTarget();
 	llvm::InitializeNativeTargetAsmPrinter();
 	llvm::InitializeNativeTargetAsmParser();
@@ -42,9 +46,8 @@ int main(int argc, char *argv[]){
 	}
 	CodeGenContext context;
 	context.generateCode(std::move(nodeList));
-	context.runCode();
 
-	context.getGCManager().collectGarbage();
+	context.runCode();
 
 	return 0;
 }

@@ -16,6 +16,7 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
     pushBlock(entry);
     int i = 0;
     for (const auto &node : nodeList) {
+        gcManager.addObject(node.get());
         llvm::BasicBlock* prevInsertPoint = nullptr;
         if (dynamic_cast<FunctionNode*>(node.get())) {
             prevInsertPoint = builder.GetInsertBlock();

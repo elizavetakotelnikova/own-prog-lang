@@ -29,6 +29,8 @@ llvm::Value *StringLiteral::codeGeneration(CodeGenContext &context)
         globalString,
         {context.builder.getInt32(0), context.builder.getInt32(0)},
         "str_ptr");
+
+    context.getGCManager().addObject(this);
     return stringPtr;
 }
 
@@ -163,6 +165,9 @@ llvm::Value *Binary::codeGeneration(CodeGenContext &context)
         std::cerr << "Unknown binary operator" << "\n";
         return nullptr;
     }
+
+    context.getGCManager().addObject(this);
+
     return context.builder.CreateBinOp(instr, leftValue, rightValue, "mathtmp");
 }
 
@@ -362,6 +367,7 @@ llvm::Value *ArrayAccess::codeGeneration(CodeGenContext &context)
 
 llvm::Value *ExpressionStatement::codeGeneration(CodeGenContext &context)
 {
+    
     return expression->codeGeneration(context);
 }
 
@@ -484,7 +490,10 @@ llvm::Value *VariableDeclaration::codeGeneration(CodeGenContext &context)
         context.builder.CreateStore(initVal, allocaInst);
     }
 
+
     context.locals()[identifier->value] = {allocaInst, varType};
+
+    context.getGCManager().addRoot(this);
     return allocaInst;
 }
 
@@ -635,7 +644,7 @@ llvm::Value *Block::codeGeneration(CodeGenContext &context)
     {
         if (statement)
         {
-            lastValue = statement->codeGeneration(context);
+            lastValue = statement->codeGeneration(context);    
         }
     }
 
@@ -849,8 +858,12 @@ llvm::Value *PrototypeFunction::codeGeneration(CodeGenContext &context)
 
     std::cout << "Function args types are chosen" << "\n";
     llvm::FunctionType *funcType = llvm::FunctionType::get(retType, argTypes, false);
+    
+    std::cout << "Create" << "\n";
     llvm::Function *func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, name, context.module.get());
 
+
+    std::cout << "Index" << "\n";
     unsigned index = 0;
     for (auto &arg : func->args())
         arg.setName(args[index++].second);

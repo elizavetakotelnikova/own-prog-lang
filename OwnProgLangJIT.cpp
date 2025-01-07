@@ -41,6 +41,7 @@ llvm::Expected<llvm::orc::ExecutorSymbolDef> llvm::orc::OwnProgLangJIT::lookup(S
         llvm::errs() << llvm::toString(Sym.takeError()) << "\n";
         return Sym.takeError();
     }
+    
     return Sym;
 }
 
