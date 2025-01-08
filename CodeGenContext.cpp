@@ -15,8 +15,7 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
     builder.SetInsertPoint(entry);
     pushBlock(entry);
     int i = 0;
-    for (const auto &node : nodeList) {
-        gcManager.addObject(node.get());
+    for (auto &node : nodeList) {
         llvm::BasicBlock* prevInsertPoint = nullptr;
         if (dynamic_cast<FunctionNode*>(node.get())) {
             prevInsertPoint = builder.GetInsertBlock();
@@ -32,6 +31,7 @@ void CodeGenContext::generateCode(std::vector<std::unique_ptr<ASTNode>> nodeList
             builder.SetInsertPoint(prevInsertPoint);
         }
 
+        gcManager.addRoot(node.release());
         i++;
     }
 
@@ -74,6 +74,7 @@ void CodeGenContext::runCode() {
     if (MainFunc) {
         std::cout << "Calling JIT-compiled 'main' function...\n";
         MainFunc();
+        getGCManager().collectGarbage();
         std::cout << "Code executed.\n";
     } else {
         std::cerr << "Failed to cast 'main' function pointer.\n";

@@ -1,5 +1,6 @@
 #include <unordered_set>
 #include <vector>
+#include <memory>
 #include <functional>
 
 class GCObject {
@@ -11,7 +12,7 @@ public:
 
 class GCManager {
 private:
-    std::unordered_set<GCObject*> objects;
+    std::unordered_set<std::unique_ptr<GCObject>> objects;
     std::vector<GCObject*> roots;
     void mark();
     void markObject(GCObject* obj);

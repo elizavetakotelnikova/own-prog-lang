@@ -30,7 +30,6 @@ llvm::Value *StringLiteral::codeGeneration(CodeGenContext &context)
         {context.builder.getInt32(0), context.builder.getInt32(0)},
         "str_ptr");
 
-    context.getGCManager().addObject(this);
     return stringPtr;
 }
 
@@ -165,8 +164,6 @@ llvm::Value *Binary::codeGeneration(CodeGenContext &context)
         std::cerr << "Unknown binary operator" << "\n";
         return nullptr;
     }
-
-    context.getGCManager().addObject(this);
 
     return context.builder.CreateBinOp(instr, leftValue, rightValue, "mathtmp");
 }
