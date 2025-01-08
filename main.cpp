@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <gc/gc.h>
 #include "include/VisitorPrintNode.h"
 #include "include/Lexer.h"
 #include "include/Parser.h"
@@ -9,8 +8,6 @@
 #include "include/OwnProgLangJIT.h"
 
 int main(int argc, char *argv[]){
-
-	GC_INIT();
 
 	llvm::InitializeNativeTarget();
 	llvm::InitializeNativeTargetAsmPrinter();
