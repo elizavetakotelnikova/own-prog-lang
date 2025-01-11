@@ -4,7 +4,7 @@ isPrime[1] = false;
 
 for (int p = 2; p * p <= 10000; p = p + 1) {
     if (isPrime[p]) {  
-        for (int i = p * p; i <= 100000; i = i + p) {
+        for (int i = p * p; i <= 10000; i = i + p) {
             isPrime[i] = false;  
         }  
     }  
